@@ -17,7 +17,7 @@ fn reposition_bubble(pet: &tauri::WebviewWindow, bubble: &tauri::WebviewWindow) 
 
     // Ideal position: centered above pet, offset left by 10px
     let bubble_w = 320i32;
-    let bubble_h = 44i32;
+    let bubble_h = 72i32;
     let mut x = pet_pos.x + 10;
     let mut y = pet_pos.y.saturating_sub(bubble_h);
 

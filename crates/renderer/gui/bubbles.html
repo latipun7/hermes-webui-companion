@@ -24,14 +24,14 @@
       box-sizing: border-box;
       max-width: 280px;
       margin-top: 2px;
-      padding: 10px 12px 10px 32px;
-      border: 2px solid rgba(210, 214, 229, 0.95);
+      padding: 10px 12px 10px 34px;
+      border: 1.5px solid #45475a;
       border-radius: 22px;
-      background: #f1f3fa;
-      color: #555a75;
+      background: #1e1e2e;
+      color: #cdd6f4;
       box-shadow:
-        0 1px 0 rgba(255, 255, 255, 0.55) inset,
-        0 4px 10px rgba(0, 0, 0, 0.14);
+        0 1px 0 rgba(255, 255, 255, 0.04) inset,
+        0 4px 12px rgba(0, 0, 0, 0.4);
       pointer-events: auto;
       cursor: pointer;
       position: relative;
@@ -39,33 +39,38 @@
     #card.visible { display: block; }
     #status-dot {
       position: absolute;
-      left: 10px;
-      top: 12px;
-      width: 14px;
-      height: 14px;
+      left: 12px;
+      top: 13px;
+      width: 12px;
+      height: 12px;
       border-radius: 50%;
     }
-    .status-approval #status-dot { background: #d97706; }
-    .status-clarify  #status-dot { background: #8b5cf6; }
-    .status-running  #status-dot { background: #9ca1b5; border: 2px solid #9ca1b5; border-top-color: transparent; animation: spin 0.85s linear infinite; }
-    .status-ready    #status-dot { background: #08b153; }
+    .status-approval #status-dot { background: #f9e2af; }
+    .status-clarify  #status-dot { background: #b4befe; }
+    .status-running  #status-dot {
+      background: transparent;
+      border: 2px solid #a6adc8;
+      border-top-color: #89b4fa;
+      animation: spin 0.85s linear infinite;
+    }
+    .status-ready    #status-dot { background: #a6e3a1; }
     @keyframes spin { to { transform: rotate(360deg); } }
     #title {
-      font-size: 15px;
-      font-weight: 800;
-      line-height: 1.16;
-      margin-bottom: 2px;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 1px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     #text {
-      font-size: 13px;
-      font-weight: 600;
-      line-height: 1.25;
-      color: #686d84;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.35;
+      color: #a6adc8;
       display: -webkit-box;
-      -webkit-line-clamp: 1;
+      -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
