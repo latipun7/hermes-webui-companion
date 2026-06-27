@@ -25,15 +25,22 @@ let lastState = null;
 function init() {
   container = document.getElementById("container");
 
-  // Click opens/focuses WebUI tab
-  container.addEventListener("click", () => {
-    // Try Tauri IPC first
+  // Click opens/focuses WebUI tab — try multiple approaches
+  container.addEventListener("click", async () => {
+    const url = "http://localhost:8787";
+    // 1. Tauri IPC: invoke open_webui command
     const invoke = window.__TAURI__?.invoke || window.__TAURI__?.core?.invoke;
     if (invoke) {
-      invoke("open_webui").catch(() => window.open("http://localhost:8787", "hermes-webui"));
-    } else {
-      window.open("http://localhost:8787", "hermes-webui");
+      try { await invoke("open_webui"); return; } catch {}
+      // 2. Tauri shell plugin fallback
+      try { await invoke("plugin:shell|open", { path: url }); return; } catch {}
     }
+    // 3. Last resort: anchor click
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.click();
   });
 }
 
