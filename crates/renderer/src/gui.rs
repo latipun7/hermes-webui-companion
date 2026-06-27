@@ -51,6 +51,7 @@ fn main() {
         ])
         .setup(|app| {
             let window = app.get_webview_window("main").expect("main window not found");
+            let win = window.clone();
             let resizing = AtomicBool::new(false);
 
             window.on_window_event(move |event| {
@@ -64,7 +65,7 @@ fn main() {
                     // Lock to spritesheet aspect ratio: width drives height
                     let new_height = (size.width as f64 / ASPECT_RATIO).round() as u32;
                     if (new_height as f64 - size.height as f64).abs() > 1.0 {
-                        let _ = window.set_size(tauri::Size::Physical(
+                        let _ = win.set_size(tauri::Size::Physical(
                             tauri::PhysicalSize::new(size.width, new_height),
                         ));
                     }
