@@ -1,7 +1,7 @@
 // bubbles.js — Standalone bubble window for Hermes Companion
 //
-// Polls the bridge server (127.0.0.1:17787) for companion state
-// and renders a speech-bubble notification above the pet.
+// Polls the bridge server for companion state and renders
+// a speech-bubble notification above the pet.
 
 const POLL_MS = 1000;
 
@@ -24,11 +24,14 @@ let lastState = null;
 
 function init() {
   container = document.getElementById("container");
-  const clickTarget = document.getElementById("click-target");
-  if (!clickTarget) return;
 
-  // Click anywhere on bubble window opens WebUI
-  clickTarget.addEventListener("click", () => {
+  // Click opens WebUI via Tauri event → pet window
+  document.body.addEventListener("click", () => {
+    const invoke = window.__TAURI__?.invoke || window.__TAURI__?.core?.invoke;
+    if (invoke) {
+      invoke("open_webui").catch(() => {});
+    }
+    // Also try bridge HTTP as fallback
     fetch("http://127.0.0.1:17787/api/open-webui").catch(() => {});
   });
 }
@@ -36,6 +39,7 @@ function init() {
 async function poll() {
   try {
     const res = await fetch("http://127.0.0.1:17787/api/state");
+    if (!res.ok) { container.className = ""; return; }
     const state = await res.json();
 
     if (JSON.stringify(state) === lastState) return;
