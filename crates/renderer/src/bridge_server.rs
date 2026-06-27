@@ -1,24 +1,22 @@
 //! Tiny HTTP server that receives WebUI companion snapshots.
 //!
-//! Listens on 127.0.0.1:17787 for POST /api/webui/snapshot,
-//! parses the JSON body into CompanionSnapshot, and emits
-//! Tauri events so the frontend can react to state changes.
+//! Listens on 127.0.0.1:17787 for POST requests from the
+//! WebUI companion-adapter.js, parses the JSON body, and
+//! updates the shared companion state.
 
 use std::io::{BufRead, BufReader, Read};
 use std::net::TcpListener;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
-use serde_json;
-use tauri::Emitter;
-
+use crate::animation::CompanionSnapshot;
 use crate::bridge::parse_snapshot;
 
-/// Spawn a background HTTP server that accepts POST snapshots
-/// from the WebUI companion-adapter.js bridge.
+/// Spawn a background HTTP server that accepts POST snapshots.
 ///
-/// Emits a `companion-state` Tauri event with the parsed snapshot
-/// on every successful POST.
-pub fn spawn_bridge_server(app_handle: tauri::AppHandle) {
+/// On each successful POST, the shared `state` is atomically
+/// updated — the frontend picks up the change on its next poll.
+pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
     let listener = match TcpListener::bind("127.0.0.1:17787") {
         Ok(l) => l,
         Err(e) => {
@@ -36,13 +34,12 @@ pub fn spawn_bridge_server(app_handle: tauri::AppHandle) {
 
             let mut reader = BufReader::new(stream);
 
-            // Read request line + headers
+            // Read request line
             let mut request_line = String::new();
             if reader.read_line(&mut request_line).is_err() {
                 continue;
             }
 
-            // Only handle POST
             let parts: Vec<&str> = request_line.split_whitespace().collect();
             if parts.len() < 2 || parts[0] != "POST" {
                 continue;
@@ -71,16 +68,17 @@ pub fn spawn_bridge_server(app_handle: tauri::AppHandle) {
                 continue;
             }
 
-            // Read body
             let mut body = vec![0u8; content_length];
             if reader.read_exact(&mut body).is_err() {
                 continue;
             }
 
-            // Parse and emit
+            // Parse and update shared state
             if let Ok(raw) = serde_json::from_slice(&body) {
                 let snapshot = parse_snapshot(&raw);
-                let _ = app_handle.emit("companion-state", serde_json::to_value(&snapshot).ok());
+                if let Ok(mut guard) = state.lock() {
+                    *guard = snapshot;
+                }
             }
         }
     });

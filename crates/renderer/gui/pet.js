@@ -1,15 +1,13 @@
-// pet.js — Canvas-based companion renderer for Hermes WebUI Companion
+// pet.js — CSS sprite-based companion renderer
 //
-// Renders animated pet spritesheets fetched from the companion sidecar
-// via Tauri IPC commands.
+// Uses CSS background-position on a <div> for zero-blink animation.
+// Same approach as franksong2702/hermes-webui-desktop-companion.
 
-const CANVAS_ID = "pet-canvas";
-const FRAME_W = 192;
-const FRAME_H = 208;
+const SPRITE_ID = "pet-sprite";
 const COLS = 8;
 const ROWS = 9;
 
-// Animation state → spritesheet row mapping (matches sprite::AnimationState)
+// State → spritesheet row
 const STATE_ROWS = {
   idle: 0,
   "running-right": 1,
@@ -22,7 +20,7 @@ const STATE_ROWS = {
   review: 8,
 };
 
-// Which animation state to use for each companion state
+// Companion state → animation state (matches animation.rs priority)
 const COMPANION_STATE_MAP = {
   idle: "idle",
   running: "running",
@@ -33,23 +31,21 @@ const COMPANION_STATE_MAP = {
 };
 
 let currentState = "idle";
-let currentFrame = 0;
-let spritesheet = null;
-let canvas = null;
-let ctx = null;
+let currentCol = 0;
+let framesPerState = COLS; // default: all columns
+let spriteDiv = null;
 let animTimer = null;
 
 // ---------------------------------------------------------------------------
-// Tauri IPC helpers
+// Tauri IPC
 // ---------------------------------------------------------------------------
 
 async function invokeTauri(cmd, args = {}) {
-  // When running inside Tauri, use the IPC bridge
   if (window.__TAURI__) {
-    const { invoke } = window.__TAURI__.core;
-    return invoke(cmd, args);
+    const invoke = window.__TAURI__.invoke || window.__TAURI__?.core?.invoke;
+    if (invoke) return invoke(cmd, args);
   }
-  // Fallback: direct HTTP to sidecar (for dev without Tauri)
+  // Fallback: direct HTTP to sidecar
   const base = "http://127.0.0.1:17888";
   if (cmd === "get_active_pet") {
     const res = await fetch(`${base}/api/pet/active`);
@@ -72,17 +68,16 @@ async function loadSpritesheet() {
     const pet = await invokeTauri("get_active_pet");
     const bytes = await invokeTauri("get_spritesheet", { slug: pet.slug });
 
-    // Convert bytes to base64 data URL (avoids blob: CSP issues)
+    // Convert bytes to base64 data URL
     let binary = "";
     for (let i = 0; i < bytes.length; i++) {
       binary += String.fromCharCode(bytes[i]);
     }
-    const b64 = btoa(binary);
-    const url = "data:image/webp;base64," + b64;
+    const url = "data:image/webp;base64," + btoa(binary);
 
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.onload = () => resolve(img);
+      img.onload = () => resolve(url);
       img.onerror = () => reject(new Error("failed to load spritesheet"));
       img.src = url;
     });
@@ -93,38 +88,23 @@ async function loadSpritesheet() {
 }
 
 // ---------------------------------------------------------------------------
-// Rendering
+// Animation — CSS background-position
 // ---------------------------------------------------------------------------
 
-function initCanvas() {
-  canvas = document.getElementById(CANVAS_ID);
-  ctx = canvas.getContext("2d");
-  // Set internal resolution once — CSS handles visual scaling
-  canvas.width = FRAME_W;
-  canvas.height = FRAME_H;
-}
-
-function drawFrame(state, col) {
-  if (!spritesheet) return;
+function applyFrame(state, col) {
+  if (!spriteDiv || !spriteDiv.style.backgroundImage) return;
   const row = STATE_ROWS[state] ?? 0;
-  const sx = col * FRAME_W;
-  const sy = row * FRAME_H;
-
-  // Draw frame directly — no clearRect needed since drawImage covers full canvas
-  ctx.drawImage(
-    spritesheet,
-    sx, sy, FRAME_W, FRAME_H,
-    0, 0, FRAME_W, FRAME_H,
-  );
+  const x = col / (COLS - 1) * 100;
+  const y = row / (ROWS - 1) * 100;
+  spriteDiv.style.backgroundPosition = `${x}% ${y}%`;
 }
 
 function startAnimation() {
   if (animTimer) clearInterval(animTimer);
-  const fps = 8; // frames per second
-  const colsPerState = COLS;
+  const fps = 8;
   animTimer = setInterval(() => {
-    currentFrame = (currentFrame + 1) % colsPerState;
-    drawFrame(currentState, currentFrame);
+    currentCol = (currentCol + 1) % framesPerState;
+    applyFrame(currentState, currentCol);
   }, 1000 / fps);
 }
 
@@ -132,19 +112,17 @@ function setAnimationState(state) {
   const mapped = COMPANION_STATE_MAP[state] || "idle";
   if (mapped !== currentState) {
     currentState = mapped;
-    currentFrame = 0;
+    currentCol = 0;
   }
 }
 
 // ---------------------------------------------------------------------------
-// State polling — real WebUI bridge state via Tauri command
+// State polling
 // ---------------------------------------------------------------------------
 
 async function pollCompanionState() {
   try {
     const state = await invokeTauri("get_companion_state");
-    // Apply same priority logic as animation.rs::resolve_animation_state:
-    // Approval > Clarify > agent state
     const attention = state.attention || [];
     const hasApproval = attention.some((a) => a.status === "approval");
     const hasClarify = attention.some((a) => a.status === "clarify");
@@ -157,42 +135,32 @@ async function pollCompanionState() {
       setAnimationState(state.state || "idle");
     }
   } catch (e) {
-    // Sidecar or bridge not running — default to idle
     setAnimationState("idle");
   }
 }
 
 function startStatePolling() {
-  // Poll immediately, then every 1 second
   pollCompanionState();
   setInterval(pollCompanionState, 1000);
 }
 
 // ---------------------------------------------------------------------------
-// Window dragging — via Tauri command (works without @tauri-apps/api npm)
+// Window dragging
 // ---------------------------------------------------------------------------
 
 function setupDrag() {
-  // Tauri v2 injects __TAURI__ even without npm, but the API shape varies.
-  // Try every known invocation path.
   document.addEventListener("mousedown", () => {
     const t = window.__TAURI__;
     if (!t) return;
-
-    // Try direct invoke on __TAURI__ (v2)
     if (typeof t.invoke === "function") {
       t.invoke("start_dragging").catch(() => {});
-      return;
-    }
-    // Try core.invoke (v2 with @tauri-apps/api loaded)
-    if (t.core && typeof t.core.invoke === "function") {
+    } else if (t.core && typeof t.core.invoke === "function") {
       t.core.invoke("start_dragging").catch(() => {});
-      return;
-    }
-    // Try __TAURI_INTERNALS__ (older injection pattern)
-    const ti = window.__TAURI_INTERNALS__;
-    if (ti && typeof ti.invoke === "function") {
-      ti.invoke("start_dragging").catch(() => {});
+    } else {
+      const ti = window.__TAURI_INTERNALS__;
+      if (ti && typeof ti.invoke === "function") {
+        ti.invoke("start_dragging").catch(() => {});
+      }
     }
   });
 }
@@ -202,13 +170,16 @@ function setupDrag() {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  initCanvas();
+  spriteDiv = document.getElementById(SPRITE_ID);
   setupDrag();
-  spritesheet = await loadSpritesheet();
-  if (!spritesheet) {
+
+  const url = await loadSpritesheet();
+  if (!url) {
     console.error("Cannot start — no spritesheet loaded");
     return;
   }
+
+  spriteDiv.style.backgroundImage = `url(${url})`;
   startAnimation();
   startStatePolling();
 }

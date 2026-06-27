@@ -69,8 +69,8 @@ fn main() {
             get_companion_state
         ])
         .setup(move |app| {
-            // Spawn bridge HTTP server
-            bridge_server::spawn_bridge_server(app.handle().clone());
+            // Spawn bridge HTTP server — updates companion state on POST
+            bridge_server::spawn_bridge_server(companion_state);
 
             // Aspect-ratio-locked window
             let window = app

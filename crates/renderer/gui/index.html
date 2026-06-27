@@ -13,16 +13,17 @@
       background: transparent !important;
       -webkit-app-region: drag;
     }
-    canvas {
-      display: block;
+    #pet-sprite {
       width: 100%;
       height: 100%;
+      background-size: 800% 900%;  /* 8 cols × 9 rows */
+      background-repeat: no-repeat;
       image-rendering: pixelated;
     }
   </style>
 </head>
 <body>
-  <canvas id="pet-canvas"></canvas>
+  <div id="pet-sprite"></div>
   <script src="pet.js"></script>
 </body>
 </html>
