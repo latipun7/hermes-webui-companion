@@ -44,21 +44,21 @@ async function poll() {
     }
 
     if (status) {
-      const cls = status === "approval" ? "status-approval visible"
-        : status === "clarify" ? "status-clarify visible"
-        : status === "running" ? "status-running visible"
-        : status === "ready" ? "status-ready visible"
-        : "visible";
+      const cls = status === "approval" ? "status-approval"
+        : status === "clarify" ? "status-clarify"
+        : status === "running" ? "status-running"
+        : status === "ready" ? "status-ready"
+        : "";
       document.body.className = cls;
       document.getElementById("title-text").textContent =
         (item && item.title) || status;
       document.getElementById("text").textContent =
         (item && item.text) || "";
     } else {
-      document.body.className = "";
+      document.body.className = "empty";
     }
   } catch (e) {
-    document.body.className = "";
+    document.body.className = "empty";
   }
 }
 
