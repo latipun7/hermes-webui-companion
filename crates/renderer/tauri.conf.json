@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicepkg/vscode-tauri/main/schemas/config.schema.json",
+  "productName": "Hermes Companion",
+  "version": "0.1.0",
+  "identifier": "dev.latipun7.hermes-webui-companion",
+  "build": {
+    "frontendDist": "gui",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Hermes Companion",
+        "width": 200,
+        "height": 260,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: http://127.0.0.1:17888; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  }
+}
