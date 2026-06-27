@@ -25,5 +25,8 @@
     "security": {
       "csp": "default-src 'self'; img-src 'self' data: http://127.0.0.1:17888; style-src 'self' 'unsafe-inline'; script-src 'self'"
     }
+  },
+  "bundle": {
+    "icon": ["icons/icon.ico"]
   }
 }
