@@ -71,15 +71,18 @@ async function loadSpritesheet() {
   try {
     const pet = await invokeTauri("get_active_pet");
     const bytes = await invokeTauri("get_spritesheet", { slug: pet.slug });
-    const blob = new Blob([bytes], { type: "image/webp" });
-    const url = URL.createObjectURL(blob);
+
+    // Convert bytes to base64 data URL (avoids blob: CSP issues)
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const b64 = btoa(binary);
+    const url = "data:image/webp;base64," + b64;
 
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        resolve(img);
-      };
+      img.onload = () => resolve(img);
       img.onerror = () => reject(new Error("failed to load spritesheet"));
       img.src = url;
     });
