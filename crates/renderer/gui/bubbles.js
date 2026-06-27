@@ -1,37 +1,15 @@
 // bubbles.js — Standalone bubble window for Hermes Companion
-//
-// Polls the bridge server for companion state and renders
-// a speech-bubble notification above the pet.
 
 const POLL_MS = 1000;
-
-const STATUS_CLASSES = {
-  approval: "status-approval",
-  clarify: "status-clarify",
-  running: "status-running",
-  ready: "status-ready",
-};
-
-const STATUS_LABELS = {
-  approval: "Approval",
-  clarify: "Question",
-  running: "Processing",
-  ready: "Complete",
-};
 
 let container = null;
 let lastState = null;
 
 function init() {
-  container = document.getElementById("container");
-
-  // Click opens WebUI via Tauri event → pet window
+  // Click opens WebUI
   document.body.addEventListener("click", () => {
     const invoke = window.__TAURI__?.invoke || window.__TAURI__?.core?.invoke;
-    if (invoke) {
-      invoke("open_webui").catch(() => {});
-    }
-    // Also try bridge HTTP as fallback
+    if (invoke) invoke("open_webui").catch(() => {});
     fetch("http://127.0.0.1:17787/api/open-webui").catch(() => {});
   });
 }
@@ -39,7 +17,7 @@ function init() {
 async function poll() {
   try {
     const res = await fetch("http://127.0.0.1:17787/api/state");
-    if (!res.ok) { container.className = ""; return; }
+    if (!res.ok) { document.body.className = ""; return; }
     const state = await res.json();
 
     if (JSON.stringify(state) === lastState) return;
@@ -66,16 +44,21 @@ async function poll() {
     }
 
     if (status) {
-      container.className = `visible ${STATUS_CLASSES[status] || ""}`;
+      const cls = status === "approval" ? "status-approval visible"
+        : status === "clarify" ? "status-clarify visible"
+        : status === "running" ? "status-running visible"
+        : status === "ready" ? "status-ready visible"
+        : "visible";
+      document.body.className = cls;
       document.getElementById("title-text").textContent =
-        (item && item.title) || STATUS_LABELS[status] || status;
+        (item && item.title) || status;
       document.getElementById("text").textContent =
         (item && item.text) || "";
     } else {
-      container.className = "";
+      document.body.className = "";
     }
   } catch (e) {
-    container.className = "";
+    document.body.className = "";
   }
 }
 
