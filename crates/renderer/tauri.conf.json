@@ -5,9 +5,9 @@
   "identifier": "dev.latipun7.hermes-webui-companion",
   "build": {
     "frontendDist": "gui",
-    "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "devUrl": null,
+    "beforeDevCommand": null,
+    "beforeBuildCommand": null
   },
   "app": {
     "windows": [
