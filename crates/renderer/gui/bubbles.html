@@ -10,12 +10,20 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: rgba(18, 18, 22, 0.92);
+      background: transparent;
       font: 11px/1.4 system-ui, -apple-system, sans-serif;
       color: #e4e4e7;
     }
+    #click-target {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      cursor: pointer;
+    }
     #container {
       display: none;
+      position: relative;
+      z-index: 2;
       padding: 8px 16px;
       border-radius: 22px;
       background: rgba(18, 18, 22, 0.88);
@@ -61,6 +69,7 @@
   </style>
 </head>
 <body>
+  <div id="click-target"></div>
   <div id="container">
     <div id="title"><span id="status-icon"></span><span id="title-text"></span></div>
     <div id="text"></div>

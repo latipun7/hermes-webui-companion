@@ -24,16 +24,24 @@ let lastState = null;
 
 function init() {
   container = document.getElementById("container");
+  const clickTarget = document.getElementById("click-target");
+  if (!clickTarget) return;
 
   // Click opens WebUI
-  container.addEventListener("click", () => {
+  clickTarget.addEventListener("click", () => {
     // Visual feedback
-    container.style.background = "#334155";
-    setTimeout(() => { container.style.background = ""; }, 200);
+    clickTarget.style.background = "rgba(51, 65, 85, 0.5)";
+    setTimeout(() => { clickTarget.style.background = ""; }, 200);
 
+    // DEBUG: test if navigation works at all
+    // window.location.href = "http://localhost:8787"; // uncomment to test
+
+    // Try Tauri IPC
     const invoke = window.__TAURI__?.invoke || window.__TAURI__?.core?.invoke;
     if (invoke) {
-      invoke("open_webui").catch(() => {});
+      invoke("open_webui").catch(() => {
+        container.style.background = "rgba(255,0,0,0.5)"; // red = error
+      });
       invoke("plugin:shell|open", { path: "http://localhost:8787" }).catch(() => {});
     }
   });
