@@ -193,14 +193,18 @@ pub fn spawn_bridge_server(state: BridgeState) {
                                 *guard = Some(cmd);
                             }
                         }
-                        // After adapter navigates, bring browser to foreground
+                        // After adapter navigates, focus browser with the SAME session URL
                         #[cfg(target_os = "windows")]
                         {
-                            let url = "http://localhost:8787".to_string();
+                            let focus_url = if sid.is_empty() {
+                                "http://localhost:8787".to_string()
+                            } else {
+                                format!("http://localhost:8787/session/{}", sid)
+                            };
                             std::thread::spawn(move || {
                                 std::thread::sleep(std::time::Duration::from_secs(2));
                                 let _ = std::process::Command::new("cmd")
-                                    .args(["/c", "start", "", &url])
+                                    .args(["/c", "start", "", &focus_url])
                                     .spawn();
                             });
                         }
