@@ -140,10 +140,44 @@ function setAnimationState(state) {
 // State polling
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Bubbles — notification overlay
+// ---------------------------------------------------------------------------
+
+const BUBBLE_MESSAGES = {
+  approval: "⚠ Approval needed",
+  clarify: "? Question",
+  running: "● Processing…",
+  ready: "✓ Done",
+};
+
+function updateBubbles(state, attention) {
+  const el = document.getElementById("bubbles");
+  if (!el) return;
+
+  // Determine message based on highest priority attention
+  let msg = "";
+  if (attention.some((a) => a.status === "approval")) {
+    msg = BUBBLE_MESSAGES.approval;
+  } else if (attention.some((a) => a.status === "clarify")) {
+    msg = BUBBLE_MESSAGES.clarify;
+  } else if (state === "running") {
+    msg = BUBBLE_MESSAGES.running;
+  } else if (state === "ready") {
+    msg = BUBBLE_MESSAGES.ready;
+  }
+
+  if (msg) {
+    el.textContent = msg;
+    el.classList.add("visible");
+  } else {
+    el.classList.remove("visible");
+  }
+}
+
 async function pollCompanionState() {
   try {
     const state = await invokeTauri("get_companion_state");
-    console.log("[pet] poll:", state.state, "attention:", (state.attention || []).length);
     const attention = state.attention || [];
     const hasApproval = attention.some((a) => a.status === "approval");
     const hasClarify = attention.some((a) => a.status === "clarify");
@@ -155,8 +189,9 @@ async function pollCompanionState() {
     } else {
       setAnimationState(state.state || "idle");
     }
+
+    updateBubbles(state.state, attention);
   } catch (e) {
-    console.error("[pet] poll error:", e);
     setAnimationState("idle");
   }
 }
