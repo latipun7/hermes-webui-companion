@@ -145,17 +145,16 @@ function setAnimationState(state) {
 // ---------------------------------------------------------------------------
 
 const BUBBLE_MESSAGES = {
-  approval: "⚠ Approval needed",
+  approval: "⚠ Approval",
   clarify: "? Question",
-  running: "● Processing…",
-  ready: "✓ Done",
+  running: "● Processing",
+  ready: "✓ Complete",
 };
 
 function updateBubbles(state, attention) {
   const el = document.getElementById("bubbles");
   if (!el) return;
 
-  // Determine message based on highest priority attention
   let msg = "";
   if (attention.some((a) => a.status === "approval")) {
     msg = BUBBLE_MESSAGES.approval;
@@ -168,8 +167,14 @@ function updateBubbles(state, attention) {
   }
 
   if (msg) {
-    el.textContent = msg;
+    const count = attention.length;
+    el.textContent = count > 1 ? `${msg} (${count})` : msg;
     el.classList.add("visible");
+    // Auto-hide ready/complete after 5 seconds
+    if (state === "ready") {
+      clearTimeout(el._hideTimer);
+      el._hideTimer = setTimeout(() => el.classList.remove("visible"), 5000);
+    }
   } else {
     el.classList.remove("visible");
   }
