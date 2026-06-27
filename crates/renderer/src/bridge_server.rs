@@ -182,7 +182,7 @@ pub fn spawn_bridge_server(state: BridgeState) {
                 if reader.read_exact(&mut body).is_ok() {
                     if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body) {
                         let sid = json.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
-                        // Queue navigation command for adapter (primary path)
+                        // Queue navigation command for adapter (navigates inside the tab)
                         if !sid.is_empty() {
                             let cmd = serde_json::json!({
                                 "id": format!("nav-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()),
@@ -192,6 +192,17 @@ pub fn spawn_bridge_server(state: BridgeState) {
                             if let Ok(mut guard) = navigation.lock() {
                                 *guard = Some(cmd);
                             }
+                        }
+                        // After adapter navigates, bring browser to foreground
+                        #[cfg(target_os = "windows")]
+                        {
+                            let url = "http://localhost:8787".to_string();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_secs(2));
+                                let _ = std::process::Command::new("cmd")
+                                    .args(["/c", "start", "", &url])
+                                    .spawn();
+                            });
                         }
                     }
                 }
