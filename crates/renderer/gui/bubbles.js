@@ -1,23 +1,24 @@
-// bubbles.js — Standalone bubble window for Hermes Companion
+// bubbles.js — Light-themed bubble card for Hermes Companion
 
 const POLL_MS = 1000;
-
-let container = null;
 let lastState = null;
 
 function init() {
-  // Click opens WebUI
-  document.body.addEventListener("click", () => {
-    const invoke = window.__TAURI__?.invoke || window.__TAURI__?.core?.invoke;
-    if (invoke) invoke("open_webui").catch(() => {});
+  const card = document.getElementById("card");
+  if (!card) return;
+
+  card.addEventListener("click", () => {
     fetch("http://127.0.0.1:17787/api/open-webui").catch(() => {});
   });
 }
 
 async function poll() {
+  const card = document.getElementById("card");
+  if (!card) return;
+
   try {
     const res = await fetch("http://127.0.0.1:17787/api/state");
-    if (!res.ok) { document.body.className = ""; return; }
+    if (!res.ok) { card.className = ""; return; }
     const state = await res.json();
 
     if (JSON.stringify(state) === lastState) return;
@@ -44,21 +45,16 @@ async function poll() {
     }
 
     if (status) {
-      const cls = status === "approval" ? "status-approval"
-        : status === "clarify" ? "status-clarify"
-        : status === "running" ? "status-running"
-        : status === "ready" ? "status-ready"
-        : "";
-      document.body.className = cls;
-      document.getElementById("title-text").textContent =
+      card.className = `visible status-${status}`;
+      document.getElementById("title").textContent =
         (item && item.title) || status;
       document.getElementById("text").textContent =
         (item && item.text) || "";
     } else {
-      document.body.className = "empty";
+      card.className = "";
     }
   } catch (e) {
-    document.body.className = "empty";
+    card.className = "";
   }
 }
 
