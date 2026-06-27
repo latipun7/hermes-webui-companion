@@ -27,7 +27,7 @@ serde.workspace = true
 serde_json.workspace = true
 tokio = { version = "1.52.3", features = ["full"] }
 ureq = { version = "3.3.0", features = ["json"] }
-tauri = { version = "2", optional = true }
+tauri = { version = "2", optional = true , features = [] }
 tauri-plugin-shell = { version = "2", optional = true }
 
 [features]

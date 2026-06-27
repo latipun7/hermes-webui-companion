@@ -24,9 +24,11 @@ let lastState = null;
 
 function init() {
   container = document.getElementById("container");
+  const clickTarget = document.getElementById("click-target");
+  if (!clickTarget) return;
 
   // Click anywhere on bubble window opens WebUI
-  document.body.addEventListener("click", () => {
+  clickTarget.addEventListener("click", () => {
     fetch("http://127.0.0.1:17787/api/open-webui").catch(() => {});
   });
 }
