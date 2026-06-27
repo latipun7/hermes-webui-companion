@@ -96,13 +96,9 @@ async function loadSpritesheet() {
 function initCanvas() {
   canvas = document.getElementById(CANVAS_ID);
   ctx = canvas.getContext("2d");
-  resizeCanvas();
-  window.addEventListener("resize", resizeCanvas);
-}
-
-function resizeCanvas() {
-  canvas.width = canvas.clientWidth * window.devicePixelRatio;
-  canvas.height = canvas.clientHeight * window.devicePixelRatio;
+  // Set internal resolution once — CSS handles visual scaling
+  canvas.width = FRAME_W;
+  canvas.height = FRAME_H;
 }
 
 function drawFrame(state, col) {
@@ -111,11 +107,11 @@ function drawFrame(state, col) {
   const sx = col * FRAME_W;
   const sy = row * FRAME_H;
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, FRAME_W, FRAME_H);
   ctx.drawImage(
     spritesheet,
     sx, sy, FRAME_W, FRAME_H,
-    0, 0, canvas.width, canvas.height,
+    0, 0, FRAME_W, FRAME_H,
   );
 }
 
