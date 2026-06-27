@@ -64,9 +64,26 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
             let method = parts[0];
             let path = parts.get(1).copied().unwrap_or("/");
 
-            // Handle GET /health
+            // Handle GET /health or /api/state
             if method == "GET" && (path == "/health" || path == "/health/") {
                 let response = cors_response(200, "{\"ok\":true,\"service\":\"hermes-webui-companion\"}");
+                let _ = stream.write_all(response.as_bytes());
+                continue;
+            }
+
+            // Serve current companion state for frontend fallback
+            if method == "GET" && (path == "/api/state" || path == "/api/state/") {
+                let body = if let Ok(guard) = state.lock() {
+                    serde_json::json!({
+                        "state": format!("{:?}", guard.state).to_lowercase(),
+                        "attention": guard.attention.iter().map(|a| serde_json::json!({
+                            "status": format!("{:?}", a.status).to_lowercase(),
+                        })).collect::<Vec<_>>(),
+                    }).to_string()
+                } else {
+                    "{\"state\":\"idle\",\"attention\":[]}".to_string()
+                };
+                let response = cors_response(200, &body);
                 let _ = stream.write_all(response.as_bytes());
                 continue;
             }
