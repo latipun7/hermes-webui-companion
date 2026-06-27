@@ -17,6 +17,15 @@ use std::thread;
 use crate::animation::CompanionSnapshot;
 use crate::bridge::parse_snapshot;
 
+/// Log only when HERMES_COMPANION_DEBUG=1.
+macro_rules! debug {
+    ($($arg:tt)*) => {
+        if std::env::var("HERMES_COMPANION_DEBUG").unwrap_or_default() == "1" {
+            eprintln!($($arg)*);
+        }
+    };
+}
+
 /// A pending navigation command, consumed by companion-adapter.js.
 pub type NavigationCommand = serde_json::Value;
 
@@ -103,7 +112,7 @@ pub fn spawn_bridge_server(state: BridgeState) {
             if method == "GET" && path.starts_with("/api/pet/navigation") {
                 let body = if let Ok(guard) = navigation.lock() {
                     if let Some(ref cmd) = *guard {
-                        eprintln!("[companion] nav poll: returning command id={}", cmd.get("id").and_then(|v| v.as_str()).unwrap_or("?"));
+                        debug!("[companion] nav poll: returning command id={}", cmd.get("id").and_then(|v| v.as_str()).unwrap_or("?"));
                         let json = serde_json::json!({ "command": cmd });
                         serde_json::to_string(&json).unwrap_or_else(|_| "{\"command\":null}".into())
                     } else {
@@ -162,13 +171,13 @@ pub fn spawn_bridge_server(state: BridgeState) {
                 if reader.read_exact(&mut body).is_ok() {
                     if let Ok(raw) = serde_json::from_slice(&body) {
                         let snap = parse_snapshot(&raw);
-                        eprintln!("[companion] state={:?} attention={}", snap.state, snap.attention.len());
+                        debug!("[companion] state={:?} attention={}", snap.state, snap.attention.len());
                         if let Ok(mut guard) = snapshot.lock() {
                             *guard = snap;
                         }
                     } else {
                         let body_str = String::from_utf8_lossy(&body);
-                        eprintln!("[companion] failed to parse POST body: {}", &body_str[..body_str.len().min(200)]);
+                        debug!("[companion] failed to parse POST body: {}", &body_str[..body_str.len().min(200)]);
                     }
                 }
                 let response = cors_response(200, "{\"ok\":true}");
