@@ -182,7 +182,6 @@ pub fn spawn_bridge_server(state: BridgeState) {
                     if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body) {
                         let sid = json.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
                         if !sid.is_empty() {
-                            // Queue navigation command for adapter
                             let cmd = serde_json::json!({
                                 "id": format!("nav-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()),
                                 "session_id": sid,
@@ -192,18 +191,6 @@ pub fn spawn_bridge_server(state: BridgeState) {
                                 *guard = Some(cmd);
                             }
                         }
-                        // Also try to open directly as fallback
-                        let url = if sid.is_empty() {
-                            "http://localhost:8787".to_string()
-                        } else {
-                            format!("http://localhost:8787/session/{}", sid)
-                        };
-                        #[cfg(target_os = "windows")]
-                        { let _ = std::process::Command::new("explorer.exe").arg(&url).spawn(); }
-                        #[cfg(target_os = "macos")]
-                        { let _ = std::process::Command::new("open").arg(&url).spawn(); }
-                        #[cfg(target_os = "linux")]
-                        { let _ = std::process::Command::new("xdg-open").arg(&url).spawn(); }
                     }
                 }
                 let response = cors_response(200, "{\"ok\":true}");
