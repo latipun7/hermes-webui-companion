@@ -73,21 +73,6 @@ fn start_dragging(window: tauri::WebviewWindow) {
 }
 
 #[tauri::command]
-fn open_webui() {
-    let url = "http://localhost:8787";
-    #[cfg(target_os = "windows")]
-    {
-        let _ = std::process::Command::new("cmd")
-            .args(["/c", "start", "", url])
-            .spawn();
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = open::that(url);
-    }
-}
-
-#[tauri::command]
 fn get_companion_state(
     state: tauri::State<Arc<Mutex<CompanionSnapshot>>>,
 ) -> Result<serde_json::Value, String> {
@@ -112,7 +97,6 @@ fn main() {
             get_active_pet,
             get_spritesheet,
             start_dragging,
-            open_webui,
             get_companion_state
         ])
         .setup(move |app| {

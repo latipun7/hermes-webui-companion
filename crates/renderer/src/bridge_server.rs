@@ -83,6 +83,19 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
                 continue;
             }
 
+            // Open WebUI in browser — called by bubble on click
+            if method == "GET" && path == "/api/open-webui" {
+                #[cfg(target_os = "windows")]
+                { let _ = std::process::Command::new("explorer.exe").arg("http://localhost:8787").spawn(); }
+                #[cfg(target_os = "macos")]
+                { let _ = std::process::Command::new("open").arg("http://localhost:8787").spawn(); }
+                #[cfg(target_os = "linux")]
+                { let _ = std::process::Command::new("xdg-open").arg("http://localhost:8787").spawn(); }
+                let response = cors_response(200, "{\"ok\":true}");
+                let _ = stream.write_all(response.as_bytes());
+                continue;
+            }
+
             // Handle OPTIONS preflight
             if method == "OPTIONS" {
                 let response = cors_response(204, "");

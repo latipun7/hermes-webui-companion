@@ -24,26 +24,10 @@ let lastState = null;
 
 function init() {
   container = document.getElementById("container");
-  const clickTarget = document.getElementById("click-target");
-  if (!clickTarget) return;
 
-  // Click opens WebUI
-  clickTarget.addEventListener("click", () => {
-    // Visual feedback
-    clickTarget.style.background = "rgba(51, 65, 85, 0.5)";
-    setTimeout(() => { clickTarget.style.background = ""; }, 200);
-
-    // DEBUG: test if navigation works at all
-    // window.location.href = "http://localhost:8787"; // uncomment to test
-
-    // Try Tauri IPC
-    const invoke = window.__TAURI__?.invoke || window.__TAURI__?.core?.invoke;
-    if (invoke) {
-      invoke("open_webui").catch(() => {
-        container.style.background = "rgba(255,0,0,0.5)"; // red = error
-      });
-      invoke("plugin:shell|open", { path: "http://localhost:8787" }).catch(() => {});
-    }
+  // Click anywhere on bubble window opens WebUI
+  document.body.addEventListener("click", () => {
+    fetch("http://127.0.0.1:17787/api/open-webui").catch(() => {});
   });
 }
 
@@ -58,7 +42,6 @@ async function poll() {
     const attention = state.attention || [];
     const companionState = (state.state || "idle").toLowerCase();
 
-    // Priority: approval > clarify > running/ready
     let status = null;
     let item = null;
 
@@ -86,7 +69,6 @@ async function poll() {
       container.className = "";
     }
   } catch (e) {
-    // bridge not reachable — hide bubble
     container.className = "";
   }
 }
