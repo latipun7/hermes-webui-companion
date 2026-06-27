@@ -21,7 +21,7 @@ use crate::animation::CompanionSnapshot;
 /// Emits a `companion-state` Tauri event with the parsed snapshot
 /// on every successful POST.
 pub fn spawn_bridge_server(app_handle: tauri::AppHandle) {
-    let listener = match TcpListener::bind("127.0.0.1:17899") {
+    let listener = match TcpListener::bind("127.0.0.1:17787") {
         Ok(l) => l,
         Err(e) => {
             eprintln!("[companion] bridge server bind failed: {e}");
