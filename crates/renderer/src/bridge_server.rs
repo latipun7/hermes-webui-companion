@@ -1,8 +1,13 @@
 //! Tiny HTTP server that receives WebUI companion snapshots.
 //!
-//! Listens on 127.0.0.1:17787 for POST requests from the
-//! WebUI companion-adapter.js, parses the JSON body, and
-//! updates the shared companion state.
+//! Listens on 127.0.0.1:17787 for HTTP requests from the
+//! WebUI companion-adapter.js. Handles:
+//! - POST /api/webui/snapshot → update companion state
+//! - GET  /api/state → return current state
+//! - GET  /health → health check
+//! - GET  /api/pet/navigation?since= → pending navigation command
+//! - POST /api/pet/navigation_ack → acknowledge navigation
+//! - POST /api/open-webui → open WebUI (legacy, bubble fallback)
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
@@ -11,6 +16,9 @@ use std::thread;
 
 use crate::animation::CompanionSnapshot;
 use crate::bridge::parse_snapshot;
+
+/// A pending navigation command, consumed by companion-adapter.js.
+pub type NavigationCommand = serde_json::Value;
 
 fn cors_response(status: u16, body: &str) -> String {
     format!(
@@ -29,11 +37,15 @@ fn cors_response(status: u16, body: &str) -> String {
     )
 }
 
-/// Spawn a background HTTP server that accepts POST snapshots.
-///
-/// On each successful POST, the shared `state` is atomically
-/// updated — the frontend picks up the change on its next poll.
-pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
+/// Shared state passed to the bridge server.
+pub struct BridgeState {
+    pub snapshot: Arc<Mutex<CompanionSnapshot>>,
+    pub navigation: Arc<Mutex<Option<NavigationCommand>>>,
+}
+
+/// Spawn a background HTTP server that accepts POST snapshots
+/// and serves companion state + navigation commands.
+pub fn spawn_bridge_server(state: BridgeState) {
     let listener = match TcpListener::bind("127.0.0.1:17787") {
         Ok(l) => l,
         Err(e) => {
@@ -42,16 +54,18 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
         }
     };
 
+    let snapshot = state.snapshot;
+    let navigation = state.navigation;
+
     thread::spawn(move || {
-        for stream in listener.incoming() {
-            let mut stream = match stream {
+        for conn in listener.incoming() {
+            let mut stream = match conn {
                 Ok(s) => s,
                 Err(_) => continue,
             };
 
             let mut reader = BufReader::new(stream.try_clone().unwrap());
 
-            // Read request line
             let mut request_line = String::new();
             if reader.read_line(&mut request_line).is_err() {
                 continue;
@@ -64,16 +78,16 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
             let method = parts[0];
             let path = parts.get(1).copied().unwrap_or("/");
 
-            // Handle GET /health or /api/state
+            // ── GET /health ──────────────────────────────────────────
             if method == "GET" && (path == "/health" || path == "/health/") {
                 let response = cors_response(200, "{\"ok\":true,\"service\":\"hermes-webui-companion\"}");
                 let _ = stream.write_all(response.as_bytes());
                 continue;
             }
 
-            // Serve current companion state for frontend fallback
+            // ── GET /api/state ─────────────────────────────────────
             if method == "GET" && (path == "/api/state" || path == "/api/state/") {
-                let body = if let Ok(guard) = state.lock() {
+                let body = if let Ok(guard) = snapshot.lock() {
                     serde_json::to_string(&*guard).unwrap_or_else(|_| "{}".into())
                 } else {
                     "{\"state\":\"Idle\",\"attention\":[]}".to_string()
@@ -83,55 +97,37 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
                 continue;
             }
 
-            // Open WebUI session — called by bubble on click (POST with session_id)
-            if method == "POST" && path == "/api/open-webui" {
-                // Read headers to find content-length
-                let mut cl = 0usize;
-                loop {
-                    let mut line = String::new();
-                    if reader.read_line(&mut line).is_err() { break; }
-                    if line == "\r\n" || line == "\n" { break; }
-                    if let Some(val) = line.to_lowercase()
-                        .strip_prefix("content-length:")
-                        .map(|s| s.trim().parse().unwrap_or(0))
-                    { cl = val; }
-                }
-                if cl > 0 && cl < 65536 {
-                    let mut body = vec![0u8; cl];
-                    if reader.read_exact(&mut body).is_ok() {
-                        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body) {
-                            let sid = json.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
-                            let url = if sid.is_empty() {
-                                "http://localhost:8787".to_string()
-                            } else {
-                                format!("http://localhost:8787/?session={}", sid)
-                            };
-                            #[cfg(target_os = "windows")]
-                            { let _ = std::process::Command::new("explorer.exe").arg(&url).spawn(); }
-                            #[cfg(target_os = "macos")]
-                            { let _ = std::process::Command::new("open").arg(&url).spawn(); }
-                            #[cfg(target_os = "linux")]
-                            { let _ = std::process::Command::new("xdg-open").arg(&url).spawn(); }
-                        }
+            // ── GET /api/pet/navigation ─────────────────────────────
+            // Adapter polls this to pick up pending navigation commands.
+            // Returns { command: { id, session_id, url, ... } } or { command: null }.
+            if method == "GET" && path.starts_with("/api/pet/navigation") {
+                let body = if let Ok(mut guard) = navigation.lock() {
+                    if let Some(ref cmd) = *guard {
+                        let json = serde_json::json!({ "command": cmd });
+                        serde_json::to_string(&json).unwrap_or_else(|_| "{\"command\":null}".into())
+                    } else {
+                        "{\"command\":null}".to_string()
                     }
+                } else {
+                    "{\"command\":null}".to_string()
+                };
+                let response = cors_response(200, &body);
+                let _ = stream.write_all(response.as_bytes());
+                continue;
+            }
+
+            // ── POST /api/pet/navigation_ack ─────────────────────────
+            // Adapter acks after applying a navigation command.
+            if method == "POST" && path == "/api/pet/navigation_ack" {
+                if let Ok(mut guard) = navigation.lock() {
+                    *guard = None;
                 }
                 let response = cors_response(200, "{\"ok\":true}");
                 let _ = stream.write_all(response.as_bytes());
                 continue;
             }
 
-            // Handle OPTIONS preflight
-            if method == "OPTIONS" {
-                let response = cors_response(204, "");
-                let _ = stream.write_all(response.as_bytes());
-                continue;
-            }
-
-            // Only POST beyond this point
-            if method != "POST" {
-                continue;
-            }
-            eprintln!("[companion] POST {path}");
+            // ── Read headers (shared by POST handlers) ────────────
             let mut content_length = 0usize;
             loop {
                 let mut line = String::new();
@@ -151,32 +147,72 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
             }
 
             if content_length == 0 {
-                continue;
-            }
-
-            let mut body = vec![0u8; content_length];
-            if reader.read_exact(&mut body).is_err() {
-                continue;
-            }
-
-            // Parse and update shared state
-            if let Ok(raw) = serde_json::from_slice(&body) {
-                let snapshot = parse_snapshot(&raw);
-                eprintln!(
-                    "[companion] state={:?} attention={}",
-                    snapshot.state,
-                    snapshot.attention.len()
-                );
-                if let Ok(mut guard) = state.lock() {
-                    *guard = snapshot;
+                // ── OPTIONS preflight ─────────────────────
+                if method == "OPTIONS" {
+                    let response = cors_response(204, "");
+                    let _ = stream.write_all(response.as_bytes());
                 }
-            } else {
-                let body_str = String::from_utf8_lossy(&body);
-                eprintln!("[companion] failed to parse POST body (first 200 chars): {}", &body_str[..body_str.len().min(200)]);
+                continue;
             }
 
-            // Send acknowledgment
-            let response = cors_response(200, "{\"ok\":true}");
+            // ── POST /api/webui/snapshot ────────────────────────────
+            if method == "POST" && path == "/api/webui/snapshot" {
+                let mut body = vec![0u8; content_length];
+                if reader.read_exact(&mut body).is_ok() {
+                    if let Ok(raw) = serde_json::from_slice(&body) {
+                        let snap = parse_snapshot(&raw);
+                        eprintln!("[companion] state={:?} attention={}", snap.state, snap.attention.len());
+                        if let Ok(mut guard) = snapshot.lock() {
+                            *guard = snap;
+                        }
+                    } else {
+                        let body_str = String::from_utf8_lossy(&body);
+                        eprintln!("[companion] failed to parse POST body: {}", &body_str[..body_str.len().min(200)]);
+                    }
+                }
+                let response = cors_response(200, "{\"ok\":true}");
+                let _ = stream.write_all(response.as_bytes());
+                continue;
+            }
+
+            // ── POST /api/open-webui (legacy) ────────────────────────
+            if method == "POST" && path == "/api/open-webui" {
+                let mut body = vec![0u8; content_length];
+                if reader.read_exact(&mut body).is_ok() {
+                    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body) {
+                        let sid = json.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
+                        if !sid.is_empty() {
+                            // Queue navigation command for adapter
+                            let cmd = serde_json::json!({
+                                "id": format!("nav-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()),
+                                "session_id": sid,
+                                "url": format!("/session/{}", sid),
+                            });
+                            if let Ok(mut guard) = navigation.lock() {
+                                *guard = Some(cmd);
+                            }
+                        }
+                        // Also try to open directly as fallback
+                        let url = if sid.is_empty() {
+                            "http://localhost:8787".to_string()
+                        } else {
+                            format!("http://localhost:8787/session/{}", sid)
+                        };
+                        #[cfg(target_os = "windows")]
+                        { let _ = std::process::Command::new("explorer.exe").arg(&url).spawn(); }
+                        #[cfg(target_os = "macos")]
+                        { let _ = std::process::Command::new("open").arg(&url).spawn(); }
+                        #[cfg(target_os = "linux")]
+                        { let _ = std::process::Command::new("xdg-open").arg(&url).spawn(); }
+                    }
+                }
+                let response = cors_response(200, "{\"ok\":true}");
+                let _ = stream.write_all(response.as_bytes());
+                continue;
+            }
+
+            // ── Unknown ────────────────────────────────────────────
+            let response = cors_response(404, "{\"error\":\"not_found\"}");
             let _ = stream.write_all(response.as_bytes());
         }
     });
