@@ -156,12 +156,26 @@ function startStatePolling() {
 // ---------------------------------------------------------------------------
 
 function setupDrag() {
-  console.log("[companion] __TAURI__ available:", !!window.__TAURI__);
+  // Tauri v2 injects __TAURI__ even without npm, but the API shape varies.
+  // Try every known invocation path.
   document.addEventListener("mousedown", () => {
-    const invoke = window.__TAURI__?.core?.invoke;
-    console.log("[companion] mousedown, invoke:", !!invoke);
-    if (invoke) {
-      invoke("start_dragging").catch((e) => console.error("[companion] drag error:", e));
+    const t = window.__TAURI__;
+    if (!t) return;
+
+    // Try direct invoke on __TAURI__ (v2)
+    if (typeof t.invoke === "function") {
+      t.invoke("start_dragging").catch(() => {});
+      return;
+    }
+    // Try core.invoke (v2 with @tauri-apps/api loaded)
+    if (t.core && typeof t.core.invoke === "function") {
+      t.core.invoke("start_dragging").catch(() => {});
+      return;
+    }
+    // Try __TAURI_INTERNALS__ (older injection pattern)
+    const ti = window.__TAURI_INTERNALS__;
+    if (ti && typeof ti.invoke === "function") {
+      ti.invoke("start_dragging").catch(() => {});
     }
   });
 }
