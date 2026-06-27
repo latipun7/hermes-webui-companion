@@ -27,7 +27,13 @@ function init() {
 
   // Click opens/focuses WebUI tab
   container.addEventListener("click", () => {
-    window.open("http://localhost:8787", "hermes-webui");
+    // Try Tauri IPC first
+    const invoke = window.__TAURI__?.invoke || window.__TAURI__?.core?.invoke;
+    if (invoke) {
+      invoke("open_webui").catch(() => window.open("http://localhost:8787", "hermes-webui"));
+    } else {
+      window.open("http://localhost:8787", "hermes-webui");
+    }
   });
 }
 

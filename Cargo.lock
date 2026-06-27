@@ -1518,6 +1518,7 @@ name = "hermes-webui-companion-renderer"
 version = "0.1.0"
 dependencies = [
  "image",
+ "open",
  "serde",
  "serde_json",
  "tauri",
