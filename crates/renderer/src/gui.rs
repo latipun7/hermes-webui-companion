@@ -16,7 +16,7 @@ fn reposition_bubble(pet: &tauri::WebviewWindow, bubble: &tauri::WebviewWindow) 
 
     let bubble_w = 320i32;
     let bubble_h = 84i32;
-    let mut x = pet_pos.x + 10;
+    let mut x = pet_pos.x + (pet_size.width as i32 - bubble_w) / 2;
     let mut y = pet_pos.y.saturating_sub(bubble_h);
 
     if let Ok(Some(monitor)) = pet.current_monitor() {
