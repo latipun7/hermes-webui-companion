@@ -24,6 +24,11 @@ let lastState = null;
 
 function init() {
   container = document.getElementById("container");
+
+  // Click opens/focuses WebUI tab
+  container.addEventListener("click", () => {
+    window.open("http://localhost:8787", "hermes-webui");
+  });
 }
 
 async function poll() {
