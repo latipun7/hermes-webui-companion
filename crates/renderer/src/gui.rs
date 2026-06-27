@@ -22,10 +22,15 @@ fn get_spritesheet(slug: String) -> Result<Vec<u8>, String> {
     client.fetch_spritesheet(&slug).map_err(|e| e.error)
 }
 
+#[tauri::command]
+fn start_dragging(window: tauri::Window) {
+    let _ = window.start_dragging();
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![get_active_pet, get_spritesheet])
+        .invoke_handler(tauri::generate_handler![get_active_pet, get_spritesheet, start_dragging])
         .run(tauri::generate_context!())
         .expect("failed to run companion GUI");
 }

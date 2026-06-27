@@ -152,11 +152,26 @@ function startStatePolling() {
 }
 
 // ---------------------------------------------------------------------------
+// Window dragging — via Tauri command (works without @tauri-apps/api npm)
+// ---------------------------------------------------------------------------
+
+function setupDrag() {
+  document.body.addEventListener("mousedown", () => {
+    // Tauri v2 injects __TAURI__.core even without npm
+    const invoke = window.__TAURI__?.core?.invoke;
+    if (invoke) {
+      invoke("start_dragging").catch(() => {});
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
 
 async function main() {
   initCanvas();
+  setupDrag();
   spritesheet = await loadSpritesheet();
   if (!spritesheet) {
     console.error("Cannot start — no spritesheet loaded");
