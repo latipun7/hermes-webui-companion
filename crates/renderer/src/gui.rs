@@ -74,7 +74,17 @@ fn start_dragging(window: tauri::WebviewWindow) {
 
 #[tauri::command]
 fn open_webui() {
-    let _ = open::that("http://localhost:8787");
+    let url = "http://localhost:8787";
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(["/c", "start", "", url])
+            .spawn();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = open::that(url);
+    }
 }
 
 #[tauri::command]
