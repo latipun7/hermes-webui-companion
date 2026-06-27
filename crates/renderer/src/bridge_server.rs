@@ -107,7 +107,7 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
                                 format!("http://localhost:8787/?session={}", sid)
                             };
                             #[cfg(target_os = "windows")]
-                            { let _ = std::process::Command::new("cmd").args(["/c", "start", "", &url]).spawn(); }
+                            { let _ = std::process::Command::new("explorer.exe").arg(&url).spawn(); }
                             #[cfg(target_os = "macos")]
                             { let _ = std::process::Command::new("open").arg(&url).spawn(); }
                             #[cfg(target_os = "linux")]
