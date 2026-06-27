@@ -27,7 +27,7 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
 
     thread::spawn(move || {
         for stream in listener.incoming() {
-            let stream = match stream {
+            let mut stream = match stream {
                 Ok(s) => s,
                 Err(_) => continue,
             };
