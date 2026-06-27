@@ -135,6 +135,7 @@ function setAnimationState(state) {
 async function pollCompanionState() {
   try {
     const state = await invokeTauri("get_companion_state");
+    console.log("[pet] poll:", state.state, "attention:", (state.attention || []).length);
     const attention = state.attention || [];
     const hasApproval = attention.some((a) => a.status === "approval");
     const hasClarify = attention.some((a) => a.status === "clarify");

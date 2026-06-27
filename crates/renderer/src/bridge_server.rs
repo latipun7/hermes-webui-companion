@@ -82,6 +82,7 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
             if method != "POST" {
                 continue;
             }
+            eprintln!("[companion] POST {path}");
             let mut content_length = 0usize;
             loop {
                 let mut line = String::new();
@@ -112,9 +113,17 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
             // Parse and update shared state
             if let Ok(raw) = serde_json::from_slice(&body) {
                 let snapshot = parse_snapshot(&raw);
+                eprintln!(
+                    "[companion] state={:?} attention={}",
+                    snapshot.state,
+                    snapshot.attention.len()
+                );
                 if let Ok(mut guard) = state.lock() {
                     *guard = snapshot;
                 }
+            } else {
+                let body_str = String::from_utf8_lossy(&body);
+                eprintln!("[companion] failed to parse POST body (first 200 chars): {}", &body_str[..body_str.len().min(200)]);
             }
 
             // Send acknowledgment
