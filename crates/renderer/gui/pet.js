@@ -138,17 +138,35 @@ function setAnimationState(state) {
 }
 
 // ---------------------------------------------------------------------------
-// State polling (placeholder — real state comes from WebUI bridge later)
+// State polling — real WebUI bridge state via Tauri command
 // ---------------------------------------------------------------------------
 
+async function pollCompanionState() {
+  try {
+    const state = await invokeTauri("get_companion_state");
+    // Apply same priority logic as animation.rs::resolve_animation_state:
+    // Approval > Clarify > agent state
+    const attention = state.attention || [];
+    const hasApproval = attention.some((a) => a.status === "approval");
+    const hasClarify = attention.some((a) => a.status === "clarify");
+
+    if (hasApproval) {
+      setAnimationState("approval");
+    } else if (hasClarify) {
+      setAnimationState("clarify");
+    } else {
+      setAnimationState(state.state || "idle");
+    }
+  } catch (e) {
+    // Sidecar or bridge not running — default to idle
+    setAnimationState("idle");
+  }
+}
+
 function startStatePolling() {
-  // For now, cycle through states every 5 seconds as a demo
-  const states = ["idle", "running", "ready", "waving"];
-  let i = 0;
-  setInterval(() => {
-    setAnimationState(states[i % states.length]);
-    i++;
-  }, 5000);
+  // Poll immediately, then every 1 second
+  pollCompanionState();
+  setInterval(pollCompanionState, 1000);
 }
 
 // ---------------------------------------------------------------------------
