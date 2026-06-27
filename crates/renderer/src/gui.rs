@@ -76,6 +76,13 @@ fn main() {
                 .get_webview_window("bubbles")
                 .expect("bubbles window not found");
             let _ = bubbles.show();
+
+            // Initial position sync — snap bubble above pet immediately
+            if let Ok(pet_pos) = window.outer_position() {
+                let _ = bubbles.set_position(tauri::Position::Physical(
+                    tauri::PhysicalPosition::new(pet_pos.x + 10, pet_pos.y.saturating_sub(44)),
+                ));
+            }
             let resizing = AtomicBool::new(false);
 
             // Position bubbles above pet window on move/resize
@@ -96,7 +103,7 @@ fn main() {
                         // Reposition bubbles on resize too
                         if let Ok(pet_pos) = win2.outer_position() {
                             let _ = bubbles.set_position(tauri::Position::Physical(
-                                tauri::PhysicalPosition::new(pet_pos.x + 10, pet_pos.y.saturating_sub(70)),
+                                tauri::PhysicalPosition::new(pet_pos.x + 10, pet_pos.y.saturating_sub(44)),
                             ));
                         }
                         resizing.store(false, Ordering::SeqCst);
@@ -104,7 +111,7 @@ fn main() {
                     WindowEvent::Moved(_pos) => {
                         if let Ok(pet_pos) = win2.outer_position() {
                             let _ = bubbles.set_position(tauri::Position::Physical(
-                                tauri::PhysicalPosition::new(pet_pos.x + 10, pet_pos.y.saturating_sub(70)),
+                                tauri::PhysicalPosition::new(pet_pos.x + 10, pet_pos.y.saturating_sub(44)),
                             ));
                         }
                     }
