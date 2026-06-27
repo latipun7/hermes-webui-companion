@@ -72,21 +72,40 @@ fn main() {
                 .get_webview_window("main")
                 .expect("main window not found");
             let win = window.clone();
+            let bubbles = app
+                .get_webview_window("bubbles")
+                .expect("bubbles window not found");
+            let _ = bubbles.show();
             let resizing = AtomicBool::new(false);
 
+            // Position bubbles above pet window on move/resize
+            let win2 = window.clone();
             window.on_window_event(move |event| {
                 use tauri::WindowEvent;
-                if let WindowEvent::Resized(size) = event {
-                    if resizing.swap(true, Ordering::SeqCst) {
-                        return;
+                match event {
+                    WindowEvent::Resized(size) => {
+                        if resizing.swap(true, Ordering::SeqCst) {
+                            return;
+                        }
+                        let new_height = (size.width as f64 / ASPECT_RATIO).round() as u32;
+                        if (new_height as f64 - size.height as f64).abs() > 1.0 {
+                            let _ = win2.set_size(tauri::Size::Physical(
+                                tauri::PhysicalSize::new(size.width, new_height),
+                            ));
+                        }
+                        resizing.store(false, Ordering::SeqCst);
                     }
-                    let new_height = (size.width as f64 / ASPECT_RATIO).round() as u32;
-                    if (new_height as f64 - size.height as f64).abs() > 1.0 {
-                        let _ = win.set_size(tauri::Size::Physical(
-                            tauri::PhysicalSize::new(size.width, new_height),
-                        ));
+                    WindowEvent::Moved(pos) | WindowEvent::Resized(_) => {
+                        // Reposition bubbles above pet
+                        if let Ok(pet_pos) = win2.outer_position() {
+                            let bubble_x = pet_pos.x + 10;
+                            let bubble_y = pet_pos.y.saturating_sub(70);
+                            let _ = bubbles.set_position(tauri::Position::Physical(
+                                tauri::PhysicalPosition::new(bubble_x, bubble_y),
+                            ));
+                        }
                     }
-                    resizing.store(false, Ordering::SeqCst);
+                    _ => {}
                 }
             });
 

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hermes Companion</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #fff;
+      font: 11px/1.4 system-ui, -apple-system, sans-serif;
+      color: #1a1a2e;
+      border-radius: 10px;
+    }
+    #container {
+      padding: 10px 12px;
+      display: none;
+    }
+    #container.visible {
+      display: block;
+    }
+    #title {
+      font-weight: 600;
+      font-size: 11px;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #text {
+      font-size: 10px;
+      color: #52525b;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #status-icon {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+    .status-approval #status-icon { background: #f59e0b; }
+    .status-clarify  #status-icon { background: #6366f1; }
+    .status-running  #status-icon { background: #3b82f6; animation: pulse 1s infinite; }
+    .status-ready    #status-icon { background: #22c55e; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="title"><span id="status-icon"></span><span id="title-text"></span></div>
+    <div id="text"></div>
+  </div>
+  <script src="bubbles.js"></script>
+</body>
+</html>

@@ -12,7 +12,9 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Hermes Companion",
+        "url": "index.html",
         "width": 172,
         "height": 186,
         "resizable": true,
@@ -22,6 +24,19 @@
         "skipTaskbar": true,
         "shadow": false,
         "dragDropEnabled": true
+      },
+      {
+        "label": "bubbles",
+        "title": "Hermes Companion",
+        "url": "bubbles.html",
+        "width": 320,
+        "height": 60,
+        "resizable": false,
+        "decorations": true,
+        "transparent": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false
       }
     ],
     "security": {
@@ -29,6 +44,8 @@
     }
   },
   "bundle": {
-    "icon": ["icons/icon.ico"]
+    "icon": [
+      "icons/icon.ico"
+    ]
   }
 }
