@@ -12,6 +12,23 @@ use std::thread;
 use crate::animation::CompanionSnapshot;
 use crate::bridge::parse_snapshot;
 
+fn cors_response(status: u16, body: &str) -> String {
+    format!(
+        "HTTP/1.1 {status} OK\r\n\
+         Content-Type: application/json\r\n\
+         Content-Length: {len}\r\n\
+         Access-Control-Allow-Origin: *\r\n\
+         Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\
+         Access-Control-Allow-Headers: Content-Type\r\n\
+         Connection: close\r\n\
+         \r\n\
+         {body}",
+        status = status,
+        len = body.len(),
+        body = body,
+    )
+}
+
 /// Spawn a background HTTP server that accepts POST snapshots.
 ///
 /// On each successful POST, the shared `state` is atomically
@@ -48,8 +65,15 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
             let path = parts.get(1).copied().unwrap_or("/");
 
             // Handle GET /health
-            if method == "GET" && path == "/health" {
-                let response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\n\r\n{\"ok\":true,\"service\":\"hermes-webui-companion\"}";
+            if method == "GET" && (path == "/health" || path == "/health/") {
+                let response = cors_response(200, "{\"ok\":true,\"service\":\"hermes-webui-companion\"}");
+                let _ = stream.write_all(response.as_bytes());
+                continue;
+            }
+
+            // Handle OPTIONS preflight
+            if method == "OPTIONS" {
+                let response = cors_response(204, "");
                 let _ = stream.write_all(response.as_bytes());
                 continue;
             }
@@ -94,7 +118,7 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
             }
 
             // Send acknowledgment
-            let response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            let response = cors_response(200, "{\"ok\":true}");
             let _ = stream.write_all(response.as_bytes());
         }
     });
