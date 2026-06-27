@@ -20,11 +20,11 @@ const STATE_ROWS = {
   review: 8,
 };
 
-// Companion state → animation state (matches animation.rs priority)
+// Companion state → animation state (matches reference project)
 const COMPANION_STATE_MAP = {
   idle: "idle",
   running: "running",
-  ready: "idle",    // completed sessions → idle (bubbles handle notifications)
+  ready: "waving",       // session completed → wave
   approval: "waiting",
   clarify: "review",
   error: "failed",
