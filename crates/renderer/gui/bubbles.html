@@ -10,14 +10,17 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #fff;
+      background: transparent;
       font: 11px/1.4 system-ui, -apple-system, sans-serif;
-      color: #1a1a2e;
-      border-radius: 10px;
+      color: #e4e4e7;
     }
     #container {
-      padding: 10px 12px;
       display: none;
+      padding: 8px 12px;
+      border-radius: 10px;
+      background: rgba(18, 18, 22, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
     }
     #container.visible {
       display: block;
@@ -29,10 +32,11 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      color: #f4f4f5;
     }
     #text {
       font-size: 10px;
-      color: #52525b;
+      color: #a1a1aa;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -42,11 +46,11 @@
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      margin-right: 4px;
+      margin-right: 5px;
       vertical-align: middle;
     }
     .status-approval #status-icon { background: #f59e0b; }
-    .status-clarify  #status-icon { background: #6366f1; }
+    .status-clarify  #status-icon { background: #a78bfa; }
     .status-running  #status-icon { background: #3b82f6; animation: pulse 1s infinite; }
     .status-ready    #status-icon { background: #22c55e; }
     @keyframes pulse {

@@ -140,61 +140,6 @@ function setAnimationState(state) {
 // State polling
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Bubbles — notification overlay
-// ---------------------------------------------------------------------------
-
-const BUBBLE_MESSAGES = {
-  approval: "⚠ Approval",
-  clarify: "? Question",
-  running: "● Processing",
-  ready: "✓ Complete",
-};
-
-function updateBubbles(state, attention) {
-  const el = document.getElementById("bubbles");
-  if (!el) return;
-
-  let msg = "";
-  let preview = "";
-  if (attention.some((a) => a.status === "approval")) {
-    msg = BUBBLE_MESSAGES.approval;
-  } else if (attention.some((a) => a.status === "clarify")) {
-    msg = BUBBLE_MESSAGES.clarify;
-  } else if (state === "running") {
-    msg = BUBBLE_MESSAGES.running;
-  } else if (state === "ready") {
-    msg = BUBBLE_MESSAGES.ready;
-  }
-
-  const first = attention[0];
-  if (first && first.text) {
-    preview = first.text.slice(0, 60) + (first.text.length > 60 ? "…" : "");
-  }
-
-  if (msg) {
-    const count = attention.length;
-    el.innerHTML = `<strong>${msg}</strong>${count > 1 ? ` (${count})` : ""}${preview ? `<br><small>${preview}</small>` : ""}`;
-    el.classList.add("visible");
-    el.style.cursor = "pointer";
-    el.style.pointerEvents = "auto";
-    el.onclick = () => {
-      // Focus or open the WebUI tab
-      const url = "http://localhost:8787";
-      // Try to focus existing tab first via postMessage
-      window.open(url, "hermes-webui");
-    };
-    if (state === "ready") {
-      clearTimeout(el._hideTimer);
-      el._hideTimer = setTimeout(() => el.classList.remove("visible"), 5000);
-    }
-  } else {
-    el.classList.remove("visible");
-    el.style.pointerEvents = "none";
-    el.onclick = null;
-  }
-}
-
 async function pollCompanionState() {
   try {
     const state = await invokeTauri("get_companion_state");
@@ -209,8 +154,6 @@ async function pollCompanionState() {
     } else {
       setAnimationState(state.state || "idle");
     }
-
-    updateBubbles(state.state, attention);
   } catch (e) {
     setAnimationState("idle");
   }

@@ -27,20 +27,21 @@
       },
       {
         "label": "bubbles",
-        "title": "Hermes Companion",
+        "title": "",
         "url": "bubbles.html",
         "width": 320,
-        "height": 60,
+        "height": 44,
         "resizable": false,
-        "decorations": true,
-        "transparent": false,
+        "decorations": false,
+        "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
+        "shadow": false,
         "visible": false
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob: http://127.0.0.1:17888; style-src 'self' 'unsafe-inline'; script-src 'self'"
+      "csp": "default-src 'self'; img-src 'self' data: blob: http://127.0.0.1:17888; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://127.0.0.1:17787"
     }
   },
   "bundle": {

@@ -21,55 +21,9 @@
       background-repeat: no-repeat;
       image-rendering: pixelated;
     }
-    #bubbles {
-      position: absolute;
-      top: 2px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 10;
-      max-width: 280px;
-      width: max-content;
-      background: rgba(18, 18, 22, 0.88);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      color: #e4e4e7;
-      font: 10px/1.4 system-ui, -apple-system, sans-serif;
-      padding: 6px 10px;
-      border-radius: 10px;
-      opacity: 0;
-      transition: opacity 0.25s;
-      pointer-events: none;
-      white-space: normal;
-      text-align: left;
-    }
-    #bubbles small {
-      color: #a1a1aa;
-      font-size: 9px;
-      display: block;
-      margin-top: 2px;
-      max-width: 260px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    #bubbles::after {
-      content: "";
-      position: absolute;
-      top: 100%;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 0;
-      height: 0;
-      border-left: 5px solid transparent;
-      border-right: 5px solid transparent;
-      border-top: 5px solid rgba(18, 18, 22, 0.88);
-    }
-    #bubbles.visible {
-      opacity: 1;
-    }
   </style>
 </head>
 <body>
-  <div id="bubbles"></div>
   <div id="pet-sprite"></div>
   <script src="pet.js"></script>
 </body>
