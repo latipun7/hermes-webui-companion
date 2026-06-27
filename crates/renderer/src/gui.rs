@@ -23,7 +23,7 @@ fn get_spritesheet(slug: String) -> Result<Vec<u8>, String> {
 }
 
 #[tauri::command]
-fn start_dragging(window: tauri::Window) {
+fn start_dragging(window: tauri::WebviewWindow) {
     let _ = window.start_dragging();
 }
 

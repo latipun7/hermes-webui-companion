@@ -156,11 +156,12 @@ function startStatePolling() {
 // ---------------------------------------------------------------------------
 
 function setupDrag() {
-  document.body.addEventListener("mousedown", () => {
-    // Tauri v2 injects __TAURI__.core even without npm
+  console.log("[companion] __TAURI__ available:", !!window.__TAURI__);
+  document.addEventListener("mousedown", () => {
     const invoke = window.__TAURI__?.core?.invoke;
+    console.log("[companion] mousedown, invoke:", !!invoke);
     if (invoke) {
-      invoke("start_dragging").catch(() => {});
+      invoke("start_dragging").catch((e) => console.error("[companion] drag error:", e));
     }
   });
 }
