@@ -32,7 +32,18 @@ const COMPANION_STATE_MAP = {
 
 let currentState = "idle";
 let currentCol = 0;
-let framesPerState = COLS; // default: all columns
+// Frame counts per state (most petdex sprites use 6-8 frames)
+const FRAMES_PER_STATE = {
+  idle: 6,
+  "running-right": 8,
+  "running-left": 8,
+  waving: 4,
+  jumping: 5,
+  failed: 8,
+  waiting: 6,
+  running: 6,
+  review: 6,
+};
 let spriteDiv = null;
 let animTimer = null;
 
@@ -103,7 +114,8 @@ function startAnimation() {
   if (animTimer) clearInterval(animTimer);
   const fps = 8;
   animTimer = setInterval(() => {
-    currentCol = (currentCol + 1) % framesPerState;
+    const maxFrames = FRAMES_PER_STATE[currentState] || 6;
+    currentCol = (currentCol + 1) % maxFrames;
     applyFrame(currentState, currentCol);
   }, 1000 / fps);
 }
