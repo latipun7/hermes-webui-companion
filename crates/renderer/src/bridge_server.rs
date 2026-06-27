@@ -182,11 +182,6 @@ pub fn spawn_bridge_server(state: BridgeState) {
                 if reader.read_exact(&mut body).is_ok() {
                     if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body) {
                         let sid = json.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
-                        let url = if sid.is_empty() {
-                            "http://localhost:8787".to_string()
-                        } else {
-                            format!("http://localhost:8787/session/{}", sid)
-                        };
                         // Queue navigation command for adapter (primary path)
                         if !sid.is_empty() {
                             let cmd = serde_json::json!({
@@ -198,13 +193,6 @@ pub fn spawn_bridge_server(state: BridgeState) {
                                 *guard = Some(cmd);
                             }
                         }
-                        // Fallback: spawn browser directly
-                        #[cfg(target_os = "windows")]
-                        { let _ = std::process::Command::new("cmd").args(["/c", "start", "", &url]).spawn(); }
-                        #[cfg(target_os = "macos")]
-                        { let _ = std::process::Command::new("open").arg(&url).spawn(); }
-                        #[cfg(target_os = "linux")]
-                        { let _ = std::process::Command::new("xdg-open").arg(&url).spawn(); }
                     }
                 }
                 let response = cors_response(200, "{\"ok\":true}");
