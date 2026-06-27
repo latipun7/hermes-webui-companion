@@ -25,26 +25,17 @@ let lastState = null;
 function init() {
   container = document.getElementById("container");
 
-  // Click opens/focuses WebUI tab
-  container.addEventListener("click", async () => {
-    // Visual feedback — flash to confirm click registered
+  // Click opens WebUI
+  container.addEventListener("click", () => {
+    // Visual feedback
     container.style.background = "#334155";
     setTimeout(() => { container.style.background = ""; }, 200);
 
-    const url = "http://localhost:8787";
     const invoke = window.__TAURI__?.invoke || window.__TAURI__?.core?.invoke;
-
-    // Try all approaches independently
     if (invoke) {
       invoke("open_webui").catch(() => {});
-      invoke("plugin:shell|open", { path: url }).catch(() => {});
+      invoke("plugin:shell|open", { path: "http://localhost:8787" }).catch(() => {});
     }
-    // Fallback: programmatic anchor
-    const a = document.createElement("a");
-    a.href = url;
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.click();
   });
 }
 
