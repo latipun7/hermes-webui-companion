@@ -79,7 +79,7 @@ async fn health() -> Json<Health> {
 async fn get_active_pet(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ActivePet>, (StatusCode, Json<ErrorBody>)> {
-    let config: serde_yaml::Value = serde_yaml::from_str(
+    let config: serde_yaml_ng::Value = serde_yaml_ng::from_str(
         &tokio::fs::read_to_string(state.config_path())
             .await
             .map_err(|_| {
