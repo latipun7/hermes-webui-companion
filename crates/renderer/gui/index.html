@@ -39,7 +39,17 @@
       opacity: 0;
       transition: opacity 0.25s;
       pointer-events: none;
-      white-space: nowrap;
+      white-space: normal;
+      text-align: left;
+    }
+    #bubbles small {
+      color: #a1a1aa;
+      font-size: 9px;
+      display: block;
+      margin-top: 2px;
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     #bubbles::after {
       content: "";

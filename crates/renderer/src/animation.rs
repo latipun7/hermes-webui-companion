@@ -12,6 +12,7 @@ use serde::Serialize;
 
 /// The overall companion state from the WebUI bridge.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum CompanionState {
     Idle,
     Running,
@@ -20,6 +21,7 @@ pub enum CompanionState {
 
 /// Status of a single attention item in the snapshot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum AttentionStatus {
     Running,
     Ready,
@@ -32,6 +34,9 @@ pub enum AttentionStatus {
 pub struct AttentionItem {
     /// The attention status for this session.
     pub status: AttentionStatus,
+    /// Preview text from the session (last message, etc.).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 
 /// Snapshot received from the WebUI companion bridge.
@@ -94,7 +99,10 @@ mod tests {
             state,
             attention: attention
                 .into_iter()
-                .map(|s| AttentionItem { status: s })
+                .map(|s| AttentionItem {
+                    status: s,
+                    text: None,
+                })
                 .collect(),
         }
     }

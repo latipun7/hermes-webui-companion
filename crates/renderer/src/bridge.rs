@@ -69,7 +69,10 @@ pub fn parse_snapshot(raw: &WebuiSnapshot) -> CompanionSnapshot {
                         Some("ready") => AttentionStatus::Ready,
                         _ => return None,
                     };
-                    Some(AttentionItem { status })
+                    Some(AttentionItem {
+                        status,
+                        text: a.text.clone().filter(|t| !t.is_empty()),
+                    })
                 })
                 .collect()
         })

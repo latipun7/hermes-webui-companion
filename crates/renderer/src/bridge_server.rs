@@ -74,14 +74,9 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
             // Serve current companion state for frontend fallback
             if method == "GET" && (path == "/api/state" || path == "/api/state/") {
                 let body = if let Ok(guard) = state.lock() {
-                    serde_json::json!({
-                        "state": format!("{:?}", guard.state).to_lowercase(),
-                        "attention": guard.attention.iter().map(|a| serde_json::json!({
-                            "status": format!("{:?}", a.status).to_lowercase(),
-                        })).collect::<Vec<_>>(),
-                    }).to_string()
+                    serde_json::to_string(&*guard).unwrap_or_else(|_| "{}".into())
                 } else {
-                    "{\"state\":\"idle\",\"attention\":[]}".to_string()
+                    "{\"state\":\"Idle\",\"attention\":[]}".to_string()
                 };
                 let response = cors_response(200, &body);
                 let _ = stream.write_all(response.as_bytes());

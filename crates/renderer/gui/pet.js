@@ -156,6 +156,7 @@ function updateBubbles(state, attention) {
   if (!el) return;
 
   let msg = "";
+  let preview = "";
   if (attention.some((a) => a.status === "approval")) {
     msg = BUBBLE_MESSAGES.approval;
   } else if (attention.some((a) => a.status === "clarify")) {
@@ -166,17 +167,31 @@ function updateBubbles(state, attention) {
     msg = BUBBLE_MESSAGES.ready;
   }
 
+  const first = attention[0];
+  if (first && first.text) {
+    preview = first.text.slice(0, 60) + (first.text.length > 60 ? "…" : "");
+  }
+
   if (msg) {
     const count = attention.length;
-    el.textContent = count > 1 ? `${msg} (${count})` : msg;
+    el.innerHTML = `<strong>${msg}</strong>${count > 1 ? ` (${count})` : ""}${preview ? `<br><small>${preview}</small>` : ""}`;
     el.classList.add("visible");
-    // Auto-hide ready/complete after 5 seconds
+    el.style.cursor = "pointer";
+    el.style.pointerEvents = "auto";
+    el.onclick = () => {
+      // Focus or open the WebUI tab
+      const url = "http://localhost:8787";
+      // Try to focus existing tab first via postMessage
+      window.open(url, "hermes-webui");
+    };
     if (state === "ready") {
       clearTimeout(el._hideTimer);
       el._hideTimer = setTimeout(() => el.classList.remove("visible"), 5000);
     }
   } else {
     el.classList.remove("visible");
+    el.style.pointerEvents = "none";
+    el.onclick = null;
   }
 }
 

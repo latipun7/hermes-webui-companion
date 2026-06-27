@@ -41,12 +41,7 @@ fn get_companion_state(
     state: tauri::State<Arc<Mutex<CompanionSnapshot>>>,
 ) -> Result<serde_json::Value, String> {
     let snap = state.lock().map_err(|e| e.to_string())?;
-    Ok(serde_json::json!({
-        "state": format!("{:?}", snap.state).to_lowercase(),
-        "attention": snap.attention.iter().map(|a| serde_json::json!({
-            "status": format!("{:?}", a.status).to_lowercase(),
-        })).collect::<Vec<_>>(),
-    }))
+    serde_json::to_value(&*snap).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
