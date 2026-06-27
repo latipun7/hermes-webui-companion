@@ -1,0 +1,13 @@
+[package]
+name = "hermes-pet-renderer"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+[[bin]]
+name = "hermes-pet-renderer"
+path = "src/main.rs"
