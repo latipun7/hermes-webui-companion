@@ -148,6 +148,7 @@ async function pollCompanionState() {
       setAnimationState(state.state || "idle");
     }
   } catch (e) {
+    console.error("[pet] poll error:", e);
     setAnimationState("idle");
   }
 }
