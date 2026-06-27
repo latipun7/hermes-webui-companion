@@ -72,6 +72,7 @@ pub fn parse_snapshot(raw: &WebuiSnapshot) -> CompanionSnapshot {
                     Some(AttentionItem {
                         status,
                         text: a.text.clone().filter(|t| !t.is_empty()),
+                        session_id: a.session_id.clone().filter(|t| !t.is_empty()),
                     })
                 })
                 .collect()

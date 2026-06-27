@@ -83,14 +83,38 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
                 continue;
             }
 
-            // Open WebUI in browser — called by bubble on click
-            if method == "GET" && path == "/api/open-webui" {
-                #[cfg(target_os = "windows")]
-                { let _ = std::process::Command::new("cmd").args(["/c", "start", "", "http://localhost:8787"]).spawn(); }
-                #[cfg(target_os = "macos")]
-                { let _ = std::process::Command::new("open").arg("http://localhost:8787").spawn(); }
-                #[cfg(target_os = "linux")]
-                { let _ = std::process::Command::new("xdg-open").arg("http://localhost:8787").spawn(); }
+            // Open WebUI session — called by bubble on click (POST with session_id)
+            if method == "POST" && path == "/api/open-webui" {
+                // Read headers to find content-length
+                let mut cl = 0usize;
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).is_err() { break; }
+                    if line == "\r\n" || line == "\n" { break; }
+                    if let Some(val) = line.to_lowercase()
+                        .strip_prefix("content-length:")
+                        .map(|s| s.trim().parse().unwrap_or(0))
+                    { cl = val; }
+                }
+                if cl > 0 && cl < 65536 {
+                    let mut body = vec![0u8; cl];
+                    if reader.read_exact(&mut body).is_ok() {
+                        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body) {
+                            let sid = json.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
+                            let url = if sid.is_empty() {
+                                "http://localhost:8787".to_string()
+                            } else {
+                                format!("http://localhost:8787/?session={}", sid)
+                            };
+                            #[cfg(target_os = "windows")]
+                            { let _ = std::process::Command::new("cmd").args(["/c", "start", "", &url]).spawn(); }
+                            #[cfg(target_os = "macos")]
+                            { let _ = std::process::Command::new("open").arg(&url).spawn(); }
+                            #[cfg(target_os = "linux")]
+                            { let _ = std::process::Command::new("xdg-open").arg(&url).spawn(); }
+                        }
+                    }
+                }
                 let response = cors_response(200, "{\"ok\":true}");
                 let _ = stream.write_all(response.as_bytes());
                 continue;

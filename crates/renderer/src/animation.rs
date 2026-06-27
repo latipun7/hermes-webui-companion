@@ -37,6 +37,9 @@ pub struct AttentionItem {
     /// Preview text from the session (last message, etc.).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
+    /// Session ID for opening in WebUI.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
 }
 
 /// Snapshot received from the WebUI companion bridge.
@@ -102,6 +105,7 @@ mod tests {
                 .map(|s| AttentionItem {
                     status: s,
                     text: None,
+                    session_id: None,
                 })
                 .collect(),
         }

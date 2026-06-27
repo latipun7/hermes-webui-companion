@@ -1,14 +1,49 @@
 // bubbles.js — Light-themed bubble card for Hermes Companion
+//
+// Polls the bridge server for companion state and renders
+// a card notification above the pet. Click opens the session
+// in WebUI via POST /api/open-webui with session_id.
 
 const POLL_MS = 1000;
 let lastState = null;
+let opening = false; // true while waiting for browser focus
 
 function init() {
   const card = document.getElementById("card");
   if (!card) return;
 
-  card.addEventListener("click", () => {
-    fetch("http://127.0.0.1:17787/api/open-webui").catch(() => {});
+  card.addEventListener("click", async () => {
+    if (opening) return;
+    opening = true;
+    card.classList.add("opening");
+
+    try {
+      // Get current attention item for session_id
+      const res = await fetch("http://127.0.0.1:17787/api/state");
+      const state = await res.json();
+      const attention = state.attention || [];
+      const first = attention[0];
+
+      await fetch("http://127.0.0.1:17787/api/open-webui", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: (first && first.session_id) || "",
+        }),
+      });
+    } catch (e) {
+      // Fallback: open homepage
+      await fetch("http://127.0.0.1:17787/api/open-webui", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: "" }),
+      });
+    }
+
+    setTimeout(() => {
+      opening = false;
+      card.classList.remove("opening");
+    }, 2000);
   });
 }
 
