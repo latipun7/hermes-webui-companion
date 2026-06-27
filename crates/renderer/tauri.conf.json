@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "Hermes Companion",
-        "width": 200,
-        "height": 260,
+        "width": 172,
+        "height": 186,
         "resizable": true,
         "decorations": false,
         "transparent": true,
