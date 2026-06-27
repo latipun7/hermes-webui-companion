@@ -11,16 +11,18 @@
       height: 100%;
       overflow: hidden;
       background: transparent !important;
+      -webkit-app-region: drag;
     }
     canvas {
       display: block;
       width: 100%;
       height: 100%;
       image-rendering: pixelated;
+      -webkit-app-region: no-drag;
     }
   </style>
 </head>
-<body data-tauri-drag-region>
+<body>
   <canvas id="pet-canvas"></canvas>
   <script src="pet.js"></script>
 </body>
