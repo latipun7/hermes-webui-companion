@@ -4,6 +4,7 @@
 //! as a transparent, always-on-top desktop window.
 
 mod animation;
+mod sidecar_client;
 mod sprite;
 
 fn main() {
