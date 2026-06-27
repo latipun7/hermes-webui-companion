@@ -7,8 +7,44 @@ use companion_renderer::animation::CompanionSnapshot;
 use companion_renderer::bridge_server;
 use companion_renderer::sidecar_client::SidecarClient;
 use tauri::Manager;
-
+/// Spritesheet frame aspect ratio: 192 / 208.
 const ASPECT_RATIO: f64 = 192.0 / 208.0;
+
+/// Position the bubble window above the pet, clamped to monitor edges.
+fn reposition_bubble(pet: &tauri::WebviewWindow, bubble: &tauri::WebviewWindow) {
+    let Ok(pet_pos) = pet.outer_position() else { return };
+    let Ok(pet_size) = pet.outer_size() else { return };
+
+    // Ideal position: centered above pet, offset left by 10px
+    let bubble_w = 320i32;
+    let bubble_h = 44i32;
+    let mut x = pet_pos.x + 10;
+    let mut y = pet_pos.y.saturating_sub(bubble_h);
+
+    // Clamp to current monitor
+    if let Ok(Some(monitor)) = pet.current_monitor() {
+        let m = monitor.position();
+        let ms = monitor.size();
+
+        // If bubble would go above monitor, flip below pet
+        if y < m.y {
+            y = pet_pos.y + pet_size.height as i32;
+        }
+
+        // Clamp horizontally — keep within monitor edges
+        let right_edge = x + bubble_w;
+        if right_edge > m.x + ms.width as i32 {
+            x = m.x + ms.width as i32 - bubble_w;
+        }
+        if x < m.x {
+            x = m.x;
+        }
+    }
+
+    let _ = bubble.set_position(tauri::Position::Physical(
+        tauri::PhysicalPosition::new(x, y),
+    ));
+}
 
 // ---------------------------------------------------------------------------
 // Tauri commands
@@ -77,12 +113,8 @@ fn main() {
                 .expect("bubbles window not found");
             let _ = bubbles.show();
 
-            // Initial position sync — snap bubble above pet immediately
-            if let Ok(pet_pos) = window.outer_position() {
-                let _ = bubbles.set_position(tauri::Position::Physical(
-                    tauri::PhysicalPosition::new(pet_pos.x + 10, pet_pos.y.saturating_sub(44)),
-                ));
-            }
+            // Initial position sync
+            reposition_bubble(&window, &bubbles);
             let resizing = AtomicBool::new(false);
 
             // Position bubbles above pet window on move/resize
@@ -101,19 +133,11 @@ fn main() {
                             ));
                         }
                         // Reposition bubbles on resize too
-                        if let Ok(pet_pos) = win2.outer_position() {
-                            let _ = bubbles.set_position(tauri::Position::Physical(
-                                tauri::PhysicalPosition::new(pet_pos.x + 10, pet_pos.y.saturating_sub(44)),
-                            ));
-                        }
+                        reposition_bubble(&win2, &bubbles);
                         resizing.store(false, Ordering::SeqCst);
                     }
                     WindowEvent::Moved(_pos) => {
-                        if let Ok(pet_pos) = win2.outer_position() {
-                            let _ = bubbles.set_position(tauri::Position::Physical(
-                                tauri::PhysicalPosition::new(pet_pos.x + 10, pet_pos.y.saturating_sub(44)),
-                            ));
-                        }
+                        reposition_bubble(&win2, &bubbles);
                     }
                     _ => {}
                 }
