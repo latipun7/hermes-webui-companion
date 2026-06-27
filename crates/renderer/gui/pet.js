@@ -110,7 +110,7 @@ function drawFrame(state, col) {
   const sx = col * FRAME_W;
   const sy = row * FRAME_H;
 
-  ctx.clearRect(0, 0, FRAME_W, FRAME_H);
+  // Draw frame directly — no clearRect needed since drawImage covers full canvas
   ctx.drawImage(
     spritesheet,
     sx, sy, FRAME_W, FRAME_H,
