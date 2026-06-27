@@ -1,4 +1,4 @@
-//! hermes-pet-sidecar — Tiny HTTP bridge between WSL filesystem and Windows host.
+//! hermes-webui-companion-sidecar — Tiny HTTP bridge between WSL filesystem and Windows host.
 //!
 //! Serves Hermes pet configuration and spritesheet assets via localhost,
 //! so the Tauri renderer on the Windows host can access them without
@@ -72,7 +72,7 @@ struct ErrorBody {
 async fn health() -> Json<Health> {
     Json(Health {
         ok: true,
-        service: "hermes-pet-sidecar",
+        service: "hermes-webui-companion-sidecar",
     })
 }
 
@@ -191,7 +191,7 @@ async fn main() {
     let state = AppState::resolve();
     let app = build_router(state);
     let addr = "127.0.0.1:17888";
-    info!("hermes-pet-sidecar listening on {}", addr);
+    info!("hermes-webui-companion-sidecar listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
@@ -239,7 +239,7 @@ mod tests {
             .to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["ok"], true);
-        assert_eq!(json["service"], "hermes-pet-sidecar");
+        assert_eq!(json["service"], "hermes-webui-companion-sidecar");
     }
 
     #[tokio::test]

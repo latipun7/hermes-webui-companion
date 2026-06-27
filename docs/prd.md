@@ -22,8 +22,8 @@ The user runs Hermes Agent and Hermes WebUI inside WSL (Arch Linux), and wants a
 
 A Rust workspace with two binaries:
 
-- **`hermes-pet-sidecar`** — A tiny HTTP server running inside WSL that bridges the filesystem boundary. It serves Hermes pet configuration (`GET /api/pet/active`) and spritesheet files (`GET /pets/{slug}/spritesheet.webp`) to the Windows host via `localhost`.
-- **`hermes-pet-renderer`** — A Tauri desktop application running natively on Windows that:
+- **`hermes-webui-companion-sidecar`** — A tiny HTTP server running inside WSL that bridges the filesystem boundary. It serves Hermes pet configuration (`GET /api/pet/active`) and spritesheet files (`GET /pets/{slug}/spritesheet.webp`) to the Windows host via `localhost`.
+- **`hermes-webui-companion-renderer`** — A Tauri desktop application running natively on Windows that:
   - Fetches the active pet config and spritesheet from the WSL sidecar at startup
   - Caches spritesheets locally in `%APPDATA%\hermes-pet\cache\`
   - Renders an animated, transparent, always-on-top desktop pet using native 2D graphics
@@ -37,8 +37,8 @@ The spritesheet format is the Codex Pet standard — 192×208px frames in an 8×
 ```
 ┌─ Windows Host ──────────────────────────────────┐
 │                                                   │
-│  🦀 hermes-pet-renderer (Tauri)                   │
-│  ├─ Spritesheet cache (%APPDATA%/hermes-pet/)     │
+│  🦀 hermes-webui-companion-renderer (Tauri)                   │
+│  ├─ Spritesheet cache (%APPDATA%/hermes-webui-companion/)     │
 │  ├─ Animation engine (state machine)              │
 │  ├─ wgpu/pixels 2D renderer (transparent window)  │
 │  ├─ Bubble overlay (notifications)                │
@@ -48,7 +48,7 @@ The spritesheet format is the Codex Pet standard — 192×208px frames in an 8×
 │         ▼                                         │
 │  ┌─ WSL ─────────────────────────────────────┐   │
 │  │                                            │   │
-│  │  🦀 hermes-pet-sidecar (:17888)            │   │
+│  │  🦀 hermes-webui-companion-sidecar (:17888)            │   │
 │  │  ├─ GET /api/pet/active → {slug, url}      │   │
 │  │  └─ GET /pets/{slug}/spritesheet.webp      │   │
 │  │         │                                   │   │
@@ -80,8 +80,8 @@ The spritesheet format is the Codex Pet standard — 192×208px frames in an 8×
 ### Workspace Structure
 
 Single Cargo workspace with two crates:
-- `crates/sidecar/` — `hermes-pet-sidecar` binary (WSL)
-- `crates/renderer/` — `hermes-pet-renderer` binary (Tauri on Windows)
+- `crates/sidecar/` — `hermes-webui-companion-sidecar` binary (WSL)
+- `crates/renderer/` — `hermes-webui-companion-renderer` binary (Tauri on Windows)
 
 ### Sidecar API Contract
 
@@ -97,7 +97,7 @@ GET /pets/{slug}/spritesheet.webp
   → 404  (pet not installed)
 
 GET /health
-  → 200 { "ok": true, "service": "hermes-pet-sidecar" }
+  → 200 { "ok": true, "service": "hermes-webui-companion-sidecar" }
 ```
 
 Config resolution: read `~/.hermes/config.yaml` → `display.pet.slug` and `display.pet.enabled`. If slug is empty, pick the first installed pet from `~/.hermes/pets/*/`. Respect `display.pet.enabled: false` by returning 404.
@@ -157,7 +157,7 @@ Window properties via Tauri:
 ### Sidecar as systemd Service
 
 The sidecar runs as a systemd user service in WSL:
-- Unit file: `~/.config/systemd/user/hermes-pet-sidecar.service`
+- Unit file: `~/.config/systemd/user/hermes-webui-companion-sidecar.service`
 - Auto-starts with WSL
 - Restarts on failure
 - Binds to `127.0.0.1:17888`
@@ -179,10 +179,10 @@ The sidecar runs as a systemd user service in WSL:
 
 ### Modules Under Test
 
-1. **Spritesheet parser** — `hermes-pet-renderer::sprite` — unit tests with a minimal 1-frame WebP fixture
-2. **Animation state machine** — `hermes-pet-renderer::animation` — unit tests for all 6 state transitions
-3. **Sidecar API** — `hermes-pet-sidecar` — integration tests with temp `HERMES_HOME`
-4. **Config reader** — `hermes-pet-sidecar::config` — unit tests with fixture YAML files
+1. **Spritesheet parser** — `hermes-webui-companion-renderer::sprite` — unit tests with a minimal 1-frame WebP fixture
+2. **Animation state machine** — `hermes-webui-companion-renderer::animation` — unit tests for all 6 state transitions
+3. **Sidecar API** — `hermes-webui-companion-sidecar` — integration tests with temp `HERMES_HOME`
+4. **Config reader** — `hermes-webui-companion-sidecar::config` — unit tests with fixture YAML files
 
 ### Prior Art
 
