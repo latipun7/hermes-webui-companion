@@ -4,7 +4,7 @@
 //! WebUI companion-adapter.js, parses the JSON body, and
 //! updates the shared companion state.
 
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -32,7 +32,7 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
                 Err(_) => continue,
             };
 
-            let mut reader = BufReader::new(stream);
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
 
             // Read request line
             let mut request_line = String::new();
@@ -41,11 +41,23 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
             }
 
             let parts: Vec<&str> = request_line.split_whitespace().collect();
-            if parts.len() < 2 || parts[0] != "POST" {
+            if parts.len() < 2 {
+                continue;
+            }
+            let method = parts[0];
+            let path = parts.get(1).copied().unwrap_or("/");
+
+            // Handle GET /health
+            if method == "GET" && path == "/health" {
+                let response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\n\r\n{\"ok\":true,\"service\":\"hermes-webui-companion\"}";
+                let _ = stream.write_all(response.as_bytes());
                 continue;
             }
 
-            // Read headers to find Content-Length
+            // Only POST beyond this point
+            if method != "POST" {
+                continue;
+            }
             let mut content_length = 0usize;
             loop {
                 let mut line = String::new();
@@ -80,6 +92,10 @@ pub fn spawn_bridge_server(state: Arc<Mutex<CompanionSnapshot>>) {
                     *guard = snapshot;
                 }
             }
+
+            // Send acknowledgment
+            let response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            let _ = stream.write_all(response.as_bytes());
         }
     });
 }
