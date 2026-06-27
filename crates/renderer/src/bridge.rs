@@ -36,6 +36,8 @@ pub struct RawAttentionItem {
     pub text: Option<String>,
     #[allow(dead_code)]
     pub session_id: Option<String>,
+    #[allow(dead_code)]
+    pub action_required_type: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +67,13 @@ pub fn parse_snapshot(raw: &WebuiSnapshot) -> CompanionSnapshot {
                     let status = match a.status.as_deref() {
                         Some("approval") => AttentionStatus::Approval,
                         Some("clarify") => AttentionStatus::Clarify,
+                        Some("action_required") => {
+                            match a.action_required_type.as_deref() {
+                                Some("approval") => AttentionStatus::Approval,
+                                Some("clarify") => AttentionStatus::Clarify,
+                                _ => AttentionStatus::Approval, // default
+                            }
+                        }
                         Some("running") => AttentionStatus::Running,
                         Some("ready") => AttentionStatus::Ready,
                         _ => return None,

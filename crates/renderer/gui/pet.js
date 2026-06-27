@@ -137,10 +137,41 @@ function setAnimationState(state) {
 }
 
 // ---------------------------------------------------------------------------
+// Drag animation — running-right / running-left while dragging
+// ---------------------------------------------------------------------------
+
+let dragState = null;    // "running-right" | "running-left" | null
+let dragPrevX = null;
+
+function setupDragAnimation() {
+  document.addEventListener("mousedown", (e) => {
+    dragPrevX = e.clientX;
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (dragPrevX === null) return;
+    const dx = e.clientX - dragPrevX;
+    if (Math.abs(dx) > 2) {
+      dragState = dx > 0 ? "running-right" : "running-left";
+      currentState = dragState;
+      currentCol = 0;
+    }
+    dragPrevX = e.clientX;
+  });
+  document.addEventListener("mouseup", () => {
+    dragPrevX = null;
+    dragState = null;
+    // Restore companion state on next poll
+  });
+}
+
+// ---------------------------------------------------------------------------
 // State polling
 // ---------------------------------------------------------------------------
 
 async function pollCompanionState() {
+  // Don't poll state while dragging
+  if (dragState) return;
+
   try {
     const state = await invokeTauri("get_companion_state");
     const attention = state.attention || [];
@@ -192,6 +223,7 @@ function setupDrag() {
 async function main() {
   spriteDiv = document.getElementById(SPRITE_ID);
   setupDrag();
+  setupDragAnimation();
 
   const url = await loadSpritesheet();
   if (!url) {
