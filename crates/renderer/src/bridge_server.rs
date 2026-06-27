@@ -6,14 +6,12 @@
 
 use std::io::{BufRead, BufReader, Read};
 use std::net::TcpListener;
-use std::sync::{Arc, Mutex};
 use std::thread;
 
 use serde_json;
 use tauri::Emitter;
 
 use crate::bridge::parse_snapshot;
-use crate::animation::CompanionSnapshot;
 
 /// Spawn a background HTTP server that accepts POST snapshots
 /// from the WebUI companion-adapter.js bridge.

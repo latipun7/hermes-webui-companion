@@ -4,13 +4,14 @@
 //! between attention items (approval > clarify > agent state).
 
 use crate::sprite::AnimationState;
+use serde::Serialize;
 
 // ---------------------------------------------------------------------------
 // Input types — mirror the WebUI companion-adapter.js snapshot shape
 // ---------------------------------------------------------------------------
 
 /// The overall companion state from the WebUI bridge.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum CompanionState {
     Idle,
     Running,
@@ -18,7 +19,7 @@ pub enum CompanionState {
 }
 
 /// Status of a single attention item in the snapshot.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum AttentionStatus {
     Running,
     Ready,
@@ -27,14 +28,14 @@ pub enum AttentionStatus {
 }
 
 /// A single session attention entry.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AttentionItem {
     /// The attention status for this session.
     pub status: AttentionStatus,
 }
 
 /// Snapshot received from the WebUI companion bridge.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CompanionSnapshot {
     /// Overall companion state.
     pub state: CompanionState,
