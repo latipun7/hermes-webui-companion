@@ -24,7 +24,7 @@ const STATE_ROWS = {
 const COMPANION_STATE_MAP = {
   idle: "idle",
   running: "running",
-  ready: "waving",
+  ready: "idle",    // completed sessions → idle (bubbles handle notifications)
   approval: "waiting",
   clarify: "review",
   error: "failed",
