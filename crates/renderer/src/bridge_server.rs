@@ -101,8 +101,9 @@ pub fn spawn_bridge_server(state: BridgeState) {
             // Adapter polls this to pick up pending navigation commands.
             // Returns { command: { id, session_id, url, ... } } or { command: null }.
             if method == "GET" && path.starts_with("/api/pet/navigation") {
-                let body = if let Ok(mut guard) = navigation.lock() {
+                let body = if let Ok(guard) = navigation.lock() {
                     if let Some(ref cmd) = *guard {
+                        eprintln!("[companion] nav poll: returning command id={}", cmd.get("id").and_then(|v| v.as_str()).unwrap_or("?"));
                         let json = serde_json::json!({ "command": cmd });
                         serde_json::to_string(&json).unwrap_or_else(|_| "{\"command\":null}".into())
                     } else {
