@@ -6,6 +6,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use companion_renderer::sidecar_client::SidecarClient;
+use tauri::Manager;
 
 /// Spritesheet frame aspect ratio: 192 / 208.
 const ASPECT_RATIO: f64 = 192.0 / 208.0;
