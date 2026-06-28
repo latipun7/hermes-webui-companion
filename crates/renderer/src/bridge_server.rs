@@ -213,16 +213,16 @@ pub fn spawn_bridge_server(state: BridgeState) {
                             std::thread::spawn(move || {
                                 std::thread::sleep(std::time::Duration::from_secs(2));
                                 // Three-stage browser focus:
-                                //  1) Try to find window with WebUI tab (title match)
-                                //  2) Try to find and focus any running browser window
-                                //  3) Fall back: open default browser to WebUI URL
+                                //  1) Title match → WebUI tab is active, just focus it
+                                //  2) Browser found → focus existing window
+                                //     (companion-adapter.js handles session switch in-tab)
+                                //  3) No browser → open default browser
                                 let ps = format!(
                                     "$w=(New-Object -ComObject WScript.Shell); \
                                      $found=$w.AppActivate('localhost:8787'); \
-                                     if(-not $found){{$found=$w.AppActivate('Hermes')}}; \
                                      if(-not $found){{$found=$w.AppActivate('WebUI')}}; \
                                      if(-not $found){{ \
-                                       $browsers=@('msedge','chrome','firefox','brave'); \
+                                       $browsers=@('zen','msedge','chrome','firefox','brave','opera','vivaldi','chromium','arc'); \
                                        foreach($b in $browsers){{ \
                                          $p=Get-Process -Name $b -ErrorAction SilentlyContinue|Where-Object{{$_.MainWindowHandle -ne 0}}|Select-Object -First 1; \
                                          if($p){{$w.AppActivate($p.Id)|Out-Null;$found=$true;break}} \
