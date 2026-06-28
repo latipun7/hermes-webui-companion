@@ -280,6 +280,29 @@ function flashButton(color, ms = 100) {
 }
 
 // ---------------------------------------------------------------------------
+// Sync button with auto-hide state from bridge
+// ---------------------------------------------------------------------------
+
+async function syncBubbleVisibility() {
+  try {
+    const res = await fetch("http://127.0.0.1:17787/api/bubbles/visible");
+    if (!res.ok) return;
+    const data = await res.json();
+    const visible = !!data.visible;
+    if (visible !== bubblesVisible) {
+      bubblesVisible = visible;
+      const btn = document.getElementById("bubble-toggle");
+      if (btn) {
+        btn.className = visible ? "on" : "";
+        btn.textContent = visible ? "\u25BC" : "\u25B2";
+      }
+    }
+  } catch (_) {
+    // bridge unreachable — keep current button state
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
 
@@ -290,6 +313,10 @@ async function main() {
   setupDrag();
   setupDragAnimation();
   setupBubbleToggle();
+
+  // Poll bridge to keep button in sync with auto-hide
+  setInterval(syncBubbleVisibility, 1000);
+  syncBubbleVisibility();
 
   const url = await loadSpritesheet();
   if (!url) {

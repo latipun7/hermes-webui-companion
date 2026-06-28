@@ -109,6 +109,16 @@ pub fn spawn_bridge_server(state: BridgeState) {
                 continue;
             }
 
+            // ── GET /api/bubbles/visible ─────────────────────────────
+            // Pet window polls this to sync toggle button state.
+            if method == "GET" && path == "/api/bubbles/visible" {
+                let v = bubbles_visible.load(Ordering::SeqCst);
+                let body = format!("{{\"visible\":{v}}}");
+                let response = cors_response(200, &body);
+                let _ = stream.write_all(response.as_bytes());
+                continue;
+            }
+
             // ── GET /api/pet/navigation ─────────────────────────────
             // Adapter polls this to pick up pending navigation commands.
             // Returns { command: { id, session_id, url, ... } } or { command: null }.
