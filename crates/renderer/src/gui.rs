@@ -10,6 +10,15 @@ use tauri::Manager;
 
 const ASPECT_RATIO: f64 = 192.0 / 208.0;
 
+/// Log only when HERMES_COMPANION_DEBUG=1.
+macro_rules! debug {
+    ($($arg:tt)*) => {
+        if std::env::var("HERMES_COMPANION_DEBUG").unwrap_or_default() == "1" {
+            eprintln!($($arg)*);
+        }
+    };
+}
+
 fn reposition_bubble(pet: &tauri::WebviewWindow, bubble: &tauri::WebviewWindow) {
     let Ok(pet_pos) = pet.outer_position() else { return };
     let Ok(pet_size) = pet.outer_size() else { return };
@@ -81,6 +90,30 @@ fn main() {
     }));
     let nav_command: Arc<Mutex<Option<bridge_server::NavigationCommand>>> =
         Arc::new(Mutex::new(None));
+
+    // ── Sidecar health check thread ──────────────────────────────
+    // Periodically probes the sidecar (:17888). If unreachable,
+    // sets companion state to Failed so the pet shows the failed animation.
+    {
+        let state_for_health = companion_state.clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(10));
+            let healthy = std::net::TcpStream::connect_timeout(
+                &"127.0.0.1:17888".parse().unwrap(),
+                std::time::Duration::from_secs(2),
+            )
+            .is_ok();
+            if let Ok(mut guard) = state_for_health.lock() {
+                if !healthy && guard.state != CompanionState::Failed {
+                    debug!("[companion] sidecar unreachable → Failed");
+                    guard.state = CompanionState::Failed;
+                } else if healthy && guard.state == CompanionState::Failed {
+                    debug!("[companion] sidecar recovered → Idle");
+                    guard.state = CompanionState::Idle;
+                }
+            }
+        });
+    }
 
     tauri::Builder::default()
         .manage(companion_state.clone())

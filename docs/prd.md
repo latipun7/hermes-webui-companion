@@ -124,15 +124,18 @@ The renderer listens on `127.0.0.1:17899` for HTTP POST snapshots from the WebUI
 }
 ```
 
-Animation state mapping:
-| Snapshot `companion.state` | Pet animation state |
-|---------------------------|-------------------|
-| `idle` | `idle` |
-| `running` | `running` (with tool activity) |
-| `ready` | `waving` (session complete) |
-| `attention[].status == "approval"` | `waiting` |
-| `attention[].status == "clarify"` | `review` |
-| Error / disconnected | `failed` |
+Animation state mapping — priority: Approval > Clarify > agent state:
+
+| Input | Pet animation state |
+|-------|-------------------|
+| `attention[].status == "action_required"` + `action_required_type == "approval"` | `waiting` |
+| `attention[].status == "action_required"` + `action_required_type == "clarify"` | `review` |
+| `companion.state == "running"` (no approval/clarify pending) | `running` (with tool activity) |
+| `companion.state == "ready"` (no approval/clarify pending) | `waving` (session complete) |
+| `companion.state == "idle"` | `idle` |
+| Sidecar unreachable / startup failure | `failed` |
+
+**Important:** The companion-adapter.js sends `status: "action_required"` (not separate `"approval"`/`"clarify"`) with `action_required_type` as the discriminator. The bridge parser (`bridge.rs`) normalizes this to `AttentionStatus::Approval`/`AttentionStatus::Clarify` before animation resolution. The adapter's `companionState()` returns `"idle"` when all attention items are `action_required` — the animation resolver's attention-first priority correctly handles this.
 
 ### Spritesheet Parsing
 

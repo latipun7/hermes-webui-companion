@@ -202,7 +202,7 @@ pub fn spawn_bridge_server(state: BridgeState) {
                                 *guard = Some(cmd);
                             }
                         }
-                        // After adapter navigates, focus browser with the SAME session URL
+                        // After adapter navigates, focus existing browser window
                         #[cfg(target_os = "windows")]
                         {
                             let focus_url = if sid.is_empty() {
@@ -212,8 +212,18 @@ pub fn spawn_bridge_server(state: BridgeState) {
                             };
                             std::thread::spawn(move || {
                                 std::thread::sleep(std::time::Duration::from_secs(2));
-                                let _ = std::process::Command::new("cmd")
-                                    .args(["/c", "start", "", &focus_url])
+                                // Try to focus existing browser window with "Hermes" in title
+                                // AppActivate returns true if it found and activated the window.
+                                // If no window found, fall back to opening a new one.
+                                let ps = format!(
+                                    "$w=(New-Object -ComObject WScript.Shell); \
+                                     if (-not $w.AppActivate('Hermes')) {{ \
+                                       Start-Process '{}' \
+                                     }}",
+                                    focus_url
+                                );
+                                let _ = std::process::Command::new("powershell")
+                                    .args(["-NoProfile", "-Command", &ps])
                                     .spawn();
                             });
                         }

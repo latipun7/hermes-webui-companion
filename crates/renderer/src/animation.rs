@@ -17,6 +17,8 @@ pub enum CompanionState {
     Idle,
     Running,
     Ready,
+    /// Sidecar unreachable or startup failure — no pet data available.
+    Failed,
 }
 
 /// Status of a single attention item in the snapshot.
@@ -55,14 +57,20 @@ pub struct CompanionSnapshot {
 // State machine
 // ---------------------------------------------------------------------------
 
-/// Priority: Approval > Clarify > agent state.
+/// Priority: Failed > Approval > Clarify > agent state.
 ///
+/// - `CompanionState::Failed` → `Failed` (sidecar unreachable, no pet data)
 /// - Any `Approval` attention item → `Waiting`
 /// - Any `Clarify` attention item → `Review`
 /// - `CompanionState::Running` → `Running`
 /// - `CompanionState::Ready` → `Waving`
 /// - `CompanionState::Idle` → `Idle`
 pub fn resolve_animation_state(snapshot: &CompanionSnapshot) -> AnimationState {
+    // Failed takes highest priority — sidecar unreachable means no pet data
+    if snapshot.state == CompanionState::Failed {
+        return AnimationState::Failed;
+    }
+
     // Approval has highest priority — scan first
     if snapshot
         .attention
@@ -85,6 +93,7 @@ pub fn resolve_animation_state(snapshot: &CompanionSnapshot) -> AnimationState {
     match snapshot.state {
         CompanionState::Running => AnimationState::Running,
         CompanionState::Ready => AnimationState::Waving,
+        CompanionState::Failed => AnimationState::Failed,
         CompanionState::Idle => AnimationState::Idle,
     }
 }
@@ -169,5 +178,20 @@ mod tests {
     fn empty_attention_falls_through_to_state() {
         let snap = snapshot(CompanionState::Idle, vec![]);
         assert_eq!(resolve_animation_state(&snap), AnimationState::Idle);
+    }
+
+    #[test]
+    fn failed_state_maps_to_failed_animation() {
+        let snap = snapshot(CompanionState::Failed, vec![]);
+        assert_eq!(resolve_animation_state(&snap), AnimationState::Failed);
+    }
+
+    #[test]
+    fn failed_beats_approval() {
+        let snap = snapshot(
+            CompanionState::Failed,
+            vec![AttentionStatus::Approval, AttentionStatus::Clarify],
+        );
+        assert_eq!(resolve_animation_state(&snap), AnimationState::Failed);
     }
 }

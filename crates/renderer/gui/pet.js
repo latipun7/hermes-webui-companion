@@ -28,6 +28,7 @@ const COMPANION_STATE_MAP = {
   approval: "waiting",
   clarify: "review",
   error: "failed",
+  failed: "failed",      // sidecar unreachable (set by bridge)
 };
 
 let currentState = "idle";
@@ -174,6 +175,13 @@ async function pollCompanionState() {
 
   try {
     const state = await invokeTauri("get_companion_state");
+
+    // Bridge signals sidecar failure → failed animation takes priority
+    if (state.state === "failed") {
+      setAnimationState("failed");
+      return;
+    }
+
     const attention = state.attention || [];
     const hasApproval = attention.some((a) => a.status === "approval");
     const hasClarify = attention.some((a) => a.status === "clarify");
@@ -186,7 +194,7 @@ async function pollCompanionState() {
       setAnimationState(state.state || "idle");
     }
   } catch (e) {
-    setAnimationState("idle");
+    // Bridge unreachable — keep current state; don't override to idle
   }
 }
 
@@ -220,6 +228,8 @@ function setupDrag() {
 // Bootstrap
 // ---------------------------------------------------------------------------
 
+let retryTimer = null;
+
 async function main() {
   spriteDiv = document.getElementById(SPRITE_ID);
   setupDrag();
@@ -227,7 +237,40 @@ async function main() {
 
   const url = await loadSpritesheet();
   if (!url) {
-    console.error("Cannot start — no spritesheet loaded");
+    // No spritesheet — show error indicator, keep polling for recovery
+    spriteDiv.style.display = "flex";
+    spriteDiv.style.alignItems = "center";
+    spriteDiv.style.justifyContent = "center";
+    spriteDiv.style.backgroundColor = "rgba(255, 0, 0, 0.12)";
+    spriteDiv.style.color = "rgba(255, 100, 100, 0.9)";
+    spriteDiv.style.fontSize = "52px";
+    spriteDiv.style.fontWeight = "bold";
+    spriteDiv.style.fontFamily = "monospace";
+    spriteDiv.textContent = "!";
+
+    // Still poll state — bridge may report failed, sidecar may recover
+    startStatePolling();
+
+    // Retry spritesheet load periodically
+    retryTimer = setInterval(async () => {
+      const retryUrl = await loadSpritesheet();
+      if (retryUrl) {
+        clearInterval(retryTimer);
+        retryTimer = null;
+        // Restore normal sprite rendering
+        spriteDiv.style.display = "";
+        spriteDiv.style.alignItems = "";
+        spriteDiv.style.justifyContent = "";
+        spriteDiv.style.backgroundColor = "";
+        spriteDiv.style.color = "";
+        spriteDiv.style.fontSize = "";
+        spriteDiv.style.fontWeight = "";
+        spriteDiv.style.fontFamily = "";
+        spriteDiv.textContent = "";
+        spriteDiv.style.backgroundImage = `url(${retryUrl})`;
+        startAnimation();
+      }
+    }, 10000);
     return;
   }
 
