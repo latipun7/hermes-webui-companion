@@ -212,15 +212,24 @@ pub fn spawn_bridge_server(state: BridgeState) {
                             };
                             std::thread::spawn(move || {
                                 std::thread::sleep(std::time::Duration::from_secs(2));
-                                // Try to focus existing browser window with "Hermes" in title
-                                // AppActivate returns true if it found and activated the window.
-                                // If no window found, fall back to opening a new one.
+                                // Three-stage browser focus:
+                                //  1) Try to find window with WebUI tab (title match)
+                                //  2) Try to find and focus any running browser window
+                                //  3) Fall back: open default browser to WebUI URL
                                 let ps = format!(
                                     "$w=(New-Object -ComObject WScript.Shell); \
-                                     if (-not $w.AppActivate('Hermes')) {{ \
-                                       Start-Process '{}' \
-                                     }}",
-                                    focus_url
+                                     $found=$w.AppActivate('localhost:8787'); \
+                                     if(-not $found){{$found=$w.AppActivate('Hermes')}}; \
+                                     if(-not $found){{$found=$w.AppActivate('WebUI')}}; \
+                                     if(-not $found){{ \
+                                       $browsers=@('msedge','chrome','firefox','brave'); \
+                                       foreach($b in $browsers){{ \
+                                         $p=Get-Process -Name $b -ErrorAction SilentlyContinue|Where-Object{{$_.MainWindowHandle -ne 0}}|Select-Object -First 1; \
+                                         if($p){{$w.AppActivate($p.Id)|Out-Null;$found=$true;break}} \
+                                       }} \
+                                     }}; \
+                                     if(-not $found){{Start-Process '{url}'}}",
+                                    url = focus_url
                                 );
                                 let _ = std::process::Command::new("powershell")
                                     .args(["-NoProfile", "-Command", &ps])
