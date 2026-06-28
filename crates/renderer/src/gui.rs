@@ -86,11 +86,14 @@ fn get_companion_state(
 /// Show or hide the bubbles window.
 /// When hidden, mouse events reach windows underneath.
 #[tauri::command]
-fn set_bubbles_visible(window: tauri::WebviewWindow, visible: bool) {
+fn set_bubbles_visible(
+    bubbles: tauri::State<tauri::WebviewWindow>,
+    visible: bool,
+) -> Result<(), String> {
     if visible {
-        let _ = window.show();
+        bubbles.show().map_err(|e| e.to_string())
     } else {
-        let _ = window.hide();
+        bubbles.hide().map_err(|e| e.to_string())
     }
 }
 
@@ -101,6 +104,7 @@ fn main() {
     }));
     let nav_command: Arc<Mutex<Option<bridge_server::NavigationCommand>>> =
         Arc::new(Mutex::new(None));
+    let bubbles_visible = Arc::new(AtomicBool::new(true));
 
     // ── Sidecar health check thread ──────────────────────────────
     // Periodically probes the sidecar (:17888). If unreachable,
@@ -140,6 +144,7 @@ fn main() {
             bridge_server::spawn_bridge_server(BridgeState {
                 snapshot: companion_state,
                 navigation: nav_command,
+                bubbles_visible: bubbles_visible.clone(),
             });
 
             let window = app
@@ -149,9 +154,33 @@ fn main() {
             let bubbles = app
                 .get_webview_window("bubbles")
                 .expect("bubbles window not found");
-            // Start hidden — bubbles.js shows when there's content
+            let _ = bubbles.show();
+            app.manage(bubbles.clone());
+            // bubbles.js will auto-hide on first poll if no content
 
             reposition_bubble(&window, &bubbles);
+
+            // ── Bubble visibility polling thread ──────────────────
+            // Reads the flag set by POST /api/bubbles/visible and
+            // shows/hides the bubbles window accordingly.
+            {
+                let bv = bubbles_visible.clone();
+                let bw = bubbles.clone();
+                let mut was_visible = true;
+                std::thread::spawn(move || loop {
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    let want = bv.load(Ordering::SeqCst);
+                    if want != was_visible {
+                        was_visible = want;
+                        if want {
+                            let _ = bw.show();
+                        } else {
+                            let _ = bw.hide();
+                        }
+                        debug!("[companion] bubbles window visible = {want}");
+                    }
+                });
+            }
 
             let resizing = AtomicBool::new(false);
             let win2 = window.clone();

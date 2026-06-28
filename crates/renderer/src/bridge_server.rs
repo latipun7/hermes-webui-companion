@@ -11,6 +11,7 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -50,6 +51,7 @@ fn cors_response(status: u16, body: &str) -> String {
 pub struct BridgeState {
     pub snapshot: Arc<Mutex<CompanionSnapshot>>,
     pub navigation: Arc<Mutex<Option<NavigationCommand>>>,
+    pub bubbles_visible: Arc<AtomicBool>,
 }
 
 /// Spawn a background HTTP server that accepts POST snapshots
@@ -65,6 +67,7 @@ pub fn spawn_bridge_server(state: BridgeState) {
 
     let snapshot = state.snapshot;
     let navigation = state.navigation;
+    let bubbles_visible = state.bubbles_visible;
 
     thread::spawn(move || {
         for conn in listener.incoming() {
@@ -178,6 +181,23 @@ pub fn spawn_bridge_server(state: BridgeState) {
                     } else {
                         let body_str = String::from_utf8_lossy(&body);
                         debug!("[companion] failed to parse POST body: {}", &body_str[..body_str.len().min(200)]);
+                    }
+                }
+                let response = cors_response(200, "{\"ok\":true}");
+                let _ = stream.write_all(response.as_bytes());
+                continue;
+            }
+
+            // ── POST /api/bubbles/visible ─────────────────────────────
+            // Pet window toggle button sets bubble visibility via HTTP.
+            if method == "POST" && path == "/api/bubbles/visible" {
+                let mut body = vec![0u8; content_length];
+                if reader.read_exact(&mut body).is_ok() {
+                    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body) {
+                        if let Some(v) = json.get("visible").and_then(|v| v.as_bool()) {
+                            bubbles_visible.store(v, Ordering::SeqCst);
+                            debug!("[companion] bubbles visible = {v}");
+                        }
                     }
                 }
                 let response = cors_response(200, "{\"ok\":true}");

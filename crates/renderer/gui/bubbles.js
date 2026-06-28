@@ -4,41 +4,11 @@
 // a card notification above the pet. Click opens the session
 // in WebUI via POST /api/open-webui with session_id.
 //
-// Auto-hides the Tauri window when there's nothing to display,
-// so clicks pass through to windows underneath.
+// Visibility is controlled by the toggle button on the pet window.
 
 const POLL_MS = 1000;
 let lastState = null;
 let opening = false; // true while waiting for browser focus
-let cardVisible = false;
-
-// ── Tauri IPC ──────────────────────────────────────────────
-
-async function invokeTauri(cmd, args = {}) {
-  if (window.__TAURI__) {
-    const invoke = window.__TAURI__.invoke || window.__TAURI__?.core?.invoke;
-    if (invoke) return invoke(cmd, args);
-  }
-  // No fallback — window show/hide requires Tauri
-}
-
-async function setBubblesVisible(visible) {
-  try {
-    await invokeTauri("set_bubbles_visible", { visible });
-  } catch (_) {
-    // Tauri IPC unavailable — ignore (e.g. running in plain browser)
-  }
-}
-
-// ── Visibility tracking ────────────────────────────────────
-
-function updateCardVisibility(visible) {
-  if (visible === cardVisible) return;
-  cardVisible = visible;
-  setBubblesVisible(visible);
-}
-
-// ── Init ───────────────────────────────────────────────────
 
 function init() {
   const card = document.getElementById("card");
@@ -85,11 +55,7 @@ async function poll() {
 
   try {
     const res = await fetch("http://127.0.0.1:17787/api/state");
-    if (!res.ok) {
-      card.className = "";
-      updateCardVisibility(false);
-      return;
-    }
+    if (!res.ok) { card.className = ""; return; }
     const state = await res.json();
 
     if (JSON.stringify(state) === lastState) return;
@@ -121,14 +87,11 @@ async function poll() {
         (item && item.title) || status;
       document.getElementById("text").textContent =
         (item && item.text) || "";
-      updateCardVisibility(true);
     } else {
       card.className = "";
-      updateCardVisibility(false);
     }
   } catch (e) {
     card.className = "";
-    updateCardVisibility(false);
   }
 }
 

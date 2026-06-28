@@ -225,6 +225,61 @@ function setupDrag() {
 }
 
 // ---------------------------------------------------------------------------
+// Bubble toggle
+// ---------------------------------------------------------------------------
+
+let bubblesVisible = true;
+
+function setupBubbleToggle() {
+  const btn = document.getElementById("bubble-toggle");
+  if (!btn) return;
+
+  // Block mousedown from reaching the drag handler
+  btn.addEventListener("mousedown", (e) => {
+    e.stopPropagation();
+  });
+
+  btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    bubblesVisible = !bubblesVisible;
+    btn.className = bubblesVisible ? "on" : "";
+    btn.textContent = bubblesVisible ? "\u25BC" : "\u25B2"; // ▼ : ▲
+
+    // Debug flash — blue blink confirms click detected
+    flashButton("rgba(137, 180, 250, 0.9)", 100);
+
+    try {
+      const res = await fetch("http://127.0.0.1:17787/api/bubbles/visible", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visible: bubblesVisible }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      console.error("bubbles visible fetch failed:", err);
+      flashButton("rgba(255, 100, 100, 0.9)", 400); // red: HTTP error
+      bubblesVisible = !bubblesVisible; // revert
+      btn.className = bubblesVisible ? "on" : "";
+      btn.textContent = bubblesVisible ? "\u25BC" : "\u25B2";
+    }
+  });
+}
+
+function flashButton(color, ms = 100) {
+  const btn = document.getElementById("bubble-toggle");
+  if (!btn) return;
+  const prev = btn.style.color;
+  btn.style.transition = "none";
+  btn.style.color = color;
+  setTimeout(() => {
+    btn.style.transition = "color 0.15s, background 0.15s, border-color 0.15s";
+    btn.style.color = prev;
+  }, ms);
+}
+
+// ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
 
@@ -234,6 +289,7 @@ async function main() {
   spriteDiv = document.getElementById(SPRITE_ID);
   setupDrag();
   setupDragAnimation();
+  setupBubbleToggle();
 
   const url = await loadSpritesheet();
   if (!url) {
