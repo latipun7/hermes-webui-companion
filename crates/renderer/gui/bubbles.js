@@ -4,11 +4,31 @@
 // a card notification above the pet. Click opens the session
 // in WebUI via POST /api/open-webui with session_id.
 //
-// Visibility is controlled by the toggle button on the pet window.
+// Auto-hides the bubble window when idle (no content to display),
+// and shows it when attention items appear.
 
 const POLL_MS = 1000;
 let lastState = null;
 let opening = false; // true while waiting for browser focus
+let cardHasContent = false; // tracks whether card is currently showing content
+
+// ── Auto-hide via bridge ───────────────────────────────────
+
+async function setBubbleVisible(visible) {
+  if (visible === cardHasContent) return; // no change
+  try {
+    await fetch("http://127.0.0.1:17787/api/bubbles/visible", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ visible }),
+    });
+    cardHasContent = visible;
+  } catch (_) {
+    // bridge unreachable — retry on next poll
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────
 
 function init() {
   const card = document.getElementById("card");
@@ -49,17 +69,26 @@ function init() {
   });
 }
 
+// ── Poll ──────────────────────────────────────────────────
+
 async function poll() {
   const card = document.getElementById("card");
   if (!card) return;
 
   try {
     const res = await fetch("http://127.0.0.1:17787/api/state");
-    if (!res.ok) { card.className = ""; return; }
+    if (!res.ok) {
+      card.className = "";
+      setBubbleVisible(false);
+      lastState = null;
+      return;
+    }
     const state = await res.json();
 
-    if (JSON.stringify(state) === lastState) return;
-    lastState = JSON.stringify(state);
+    // Only act on state changes
+    const stateKey = JSON.stringify(state);
+    if (stateKey === lastState) return;
+    lastState = stateKey;
 
     const attention = state.attention || [];
     const companionState = (state.state || "idle").toLowerCase();
@@ -87,11 +116,15 @@ async function poll() {
         (item && item.title) || status;
       document.getElementById("text").textContent =
         (item && item.text) || "";
+      setBubbleVisible(true);
     } else {
       card.className = "";
+      setBubbleVisible(false);
     }
   } catch (e) {
     card.className = "";
+    setBubbleVisible(false);
+    lastState = null;
   }
 }
 
