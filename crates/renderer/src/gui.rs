@@ -83,6 +83,17 @@ fn get_companion_state(
     serde_json::to_value(&*snap).map_err(|e| e.to_string())
 }
 
+/// Show or hide the bubbles window.
+/// When hidden, mouse events reach windows underneath.
+#[tauri::command]
+fn set_bubbles_visible(window: tauri::WebviewWindow, visible: bool) {
+    if visible {
+        let _ = window.show();
+    } else {
+        let _ = window.hide();
+    }
+}
+
 fn main() {
     let companion_state = Arc::new(Mutex::new(CompanionSnapshot {
         state: CompanionState::Idle,
@@ -122,7 +133,8 @@ fn main() {
             get_spritesheet,
             start_dragging,
             open_webui,
-            get_companion_state
+            get_companion_state,
+            set_bubbles_visible
         ])
         .setup(move |app| {
             bridge_server::spawn_bridge_server(BridgeState {
@@ -137,7 +149,7 @@ fn main() {
             let bubbles = app
                 .get_webview_window("bubbles")
                 .expect("bubbles window not found");
-            let _ = bubbles.show();
+            // Start hidden — bubbles.js shows when there's content
 
             reposition_bubble(&window, &bubbles);
 
