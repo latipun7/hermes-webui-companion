@@ -1,106 +1,27 @@
 //! Tauri GUI binary for the desktop companion renderer.
+//!
+//! Thin orchestrator — wires together the bridge server, sidecar health check,
+//! bubble tracking, Tauri commands, and window event handlers. All heavy logic
+//! lives in sibling modules.
+
+mod bubble;
+mod commands;
+mod debug;
+mod health;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use companion_renderer::animation::{CompanionSnapshot, CompanionState, StateResponse};
+use companion_renderer::animation::{CompanionSnapshot, CompanionState};
 use companion_renderer::bridge_server::{self, BridgeState};
-use companion_renderer::sidecar_client::SidecarClient;
 use tauri::Manager;
 
-const ASPECT_RATIO: f64 = 192.0 / 208.0;
-
-/// Log only when HERMES_COMPANION_DEBUG=1.
-macro_rules! debug {
-    ($($arg:tt)*) => {
-        if std::env::var("HERMES_COMPANION_DEBUG").unwrap_or_default() == "1" {
-            eprintln!($($arg)*);
-        }
-    };
-}
-
-fn reposition_bubble(pet: &tauri::WebviewWindow, bubble: &tauri::WebviewWindow) {
-    let Ok(pet_pos) = pet.outer_position() else { return };
-    let Ok(pet_size) = pet.outer_size() else { return };
-
-    let bubble_w = 320i32;
-    let bubble_h = 84i32;
-    let mut x = pet_pos.x + (pet_size.width as i32 - bubble_w) / 2;
-    let mut y = pet_pos.y.saturating_sub(bubble_h);
-
-    if let Ok(Some(monitor)) = pet.current_monitor() {
-        let m = monitor.position();
-        let ms = monitor.size();
-        if y < m.y {
-            y = pet_pos.y + pet_size.height as i32;
-        }
-        let right_edge = x + bubble_w;
-        if right_edge > m.x + ms.width as i32 {
-            x = m.x + ms.width as i32 - bubble_w;
-        }
-        if x < m.x {
-            x = m.x;
-        }
-    }
-
-    let _ = bubble.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x, y)));
-}
-
-#[tauri::command]
-fn get_active_pet() -> Result<serde_json::Value, String> {
-    let client = SidecarClient::new("http://127.0.0.1:17888".into());
-    let pet = client.fetch_active_pet().map_err(|e| e.error)?;
-    Ok(serde_json::json!({
-        "slug": pet.slug,
-        "spritesheet_url": pet.spritesheet_url,
-        "display_name": pet.display_name,
-    }))
-}
-
-#[tauri::command]
-fn get_spritesheet(slug: String) -> Result<Vec<u8>, String> {
-    let client = SidecarClient::new("http://127.0.0.1:17888".into());
-    client.fetch_spritesheet(&slug).map_err(|e| e.error)
-}
-
-#[tauri::command]
-fn start_dragging(window: tauri::WebviewWindow) {
-    let _ = window.start_dragging();
-}
-
-#[tauri::command]
-fn open_webui() {
-    let _ = std::process::Command::new("cmd")
-        .args(["/c", "start", "", "http://localhost:8787"])
-        .spawn();
-}
-
-#[tauri::command]
-fn get_companion_state(
-    state: tauri::State<Arc<Mutex<CompanionSnapshot>>>,
-    sidecar_healthy: tauri::State<Arc<AtomicBool>>,
-) -> Result<serde_json::Value, String> {
-    let snap = state.lock().map_err(|e| e.to_string())?;
-    let healthy = sidecar_healthy.load(Ordering::SeqCst);
-    let resp = StateResponse::from_snapshot(&snap, healthy);
-    serde_json::to_value(&resp).map_err(|e| e.to_string())
-}
-
-/// Show or hide the bubbles window.
-/// When hidden, mouse events reach windows underneath.
-#[tauri::command]
-fn set_bubbles_visible(
-    bubbles: tauri::State<tauri::WebviewWindow>,
-    visible: bool,
-) -> Result<(), String> {
-    if visible {
-        bubbles.show().map_err(|e| e.to_string())
-    } else {
-        bubbles.hide().map_err(|e| e.to_string())
-    }
-}
+use crate::bubble::{reposition_bubble, spawn_bubble_visibility_poller};
+use crate::debug::{debug, ASPECT_RATIO};
+use crate::health::spawn_health_check;
 
 fn main() {
+    // ── Shared state ──────────────────────────────────────────
     let companion_state = Arc::new(Mutex::new(CompanionSnapshot {
         state: CompanionState::Idle,
         attention: Vec::new(),
@@ -108,54 +29,22 @@ fn main() {
     let nav_command: Arc<Mutex<Option<bridge_server::NavigationCommand>>> =
         Arc::new(Mutex::new(None));
     let bubbles_visible = Arc::new(AtomicBool::new(true));
-    // ── Initial sidecar health check (synchronous) ─────────────
-    // Run once before spawning the background thread so the app
-    // knows immediately whether the sidecar is reachable.
-    let initial_healthy = std::net::TcpStream::connect_timeout(
-        &"127.0.0.1:17888".parse().unwrap(),
-        std::time::Duration::from_secs(2),
-    )
-    .is_ok();
-    if !initial_healthy {
-        debug!("[companion] sidecar unreachable at startup → Failed");
-    }
-    let sidecar_healthy = Arc::new(AtomicBool::new(initial_healthy));
+    let sidecar_healthy = spawn_health_check();
 
-    // ── Sidecar health check thread (background) ──────────────
-    // Periodically probes the sidecar (:17888). Sets a flag consumed
-    // by resolve_animation_state() — does NOT overwrite the snapshot,
-    // so incoming WebUI snapshots can't race the health check and
-    // cause a flicker loop (Failed → Ready → Failed → …).
-    {
-        let sidecar_healthy = sidecar_healthy.clone();
-        std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_secs(10));
-            let healthy = std::net::TcpStream::connect_timeout(
-                &"127.0.0.1:17888".parse().unwrap(),
-                std::time::Duration::from_secs(2),
-            )
-            .is_ok();
-            let was = sidecar_healthy.swap(healthy, Ordering::SeqCst);
-            if !healthy && was {
-                debug!("[companion] sidecar unreachable → Failed");
-            } else if healthy && !was {
-                debug!("[companion] sidecar recovered → Idle");
-            }
-        });
-    }
-
+    // ── Tauri builder ─────────────────────────────────────────
     tauri::Builder::default()
         .manage(companion_state.clone())
         .manage(sidecar_healthy.clone())
         .invoke_handler(tauri::generate_handler![
-            get_active_pet,
-            get_spritesheet,
-            start_dragging,
-            open_webui,
-            get_companion_state,
-            set_bubbles_visible
+            commands::get_active_pet,
+            commands::get_spritesheet,
+            commands::start_dragging,
+            commands::open_webui,
+            commands::get_companion_state,
+            commands::set_bubbles_visible
         ])
         .setup(move |app| {
+            // Bridge server — receives WebUI snapshots
             bridge_server::spawn_bridge_server(BridgeState {
                 snapshot: companion_state,
                 navigation: nav_command,
@@ -163,41 +52,20 @@ fn main() {
                 sidecar_healthy: sidecar_healthy.clone(),
             });
 
+            // Windows
             let window = app
                 .get_webview_window("main")
                 .expect("main window not found");
-            let _win = window.clone();
             let bubbles = app
                 .get_webview_window("bubbles")
                 .expect("bubbles window not found");
             let _ = bubbles.show();
             app.manage(bubbles.clone());
-            // bubbles.js will auto-hide on first poll if no content
 
             reposition_bubble(&window, &bubbles);
+            spawn_bubble_visibility_poller(bubbles_visible, bubbles.clone());
 
-            // ── Bubble visibility polling thread ──────────────────
-            // Reads the flag set by POST /api/bubbles/visible and
-            // shows/hides the bubbles window accordingly.
-            {
-                let bv = bubbles_visible.clone();
-                let bw = bubbles.clone();
-                let mut was_visible = true;
-                std::thread::spawn(move || loop {
-                    std::thread::sleep(std::time::Duration::from_millis(250));
-                    let want = bv.load(Ordering::SeqCst);
-                    if want != was_visible {
-                        was_visible = want;
-                        if want {
-                            let _ = bw.show();
-                        } else {
-                            let _ = bw.hide();
-                        }
-                        debug!("[companion] bubbles window visible = {want}");
-                    }
-                });
-            }
-
+            // ── Window events ───────────────────────────────────
             let resizing = AtomicBool::new(false);
             let win2 = window.clone();
 
