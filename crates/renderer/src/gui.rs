@@ -3,7 +3,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use companion_renderer::animation::{CompanionSnapshot, CompanionState};
+use companion_renderer::animation::{CompanionSnapshot, CompanionState, StateResponse};
 use companion_renderer::bridge_server::{self, BridgeState};
 use companion_renderer::sidecar_client::SidecarClient;
 use tauri::Manager;
@@ -80,7 +80,8 @@ fn get_companion_state(
     state: tauri::State<Arc<Mutex<CompanionSnapshot>>>,
 ) -> Result<serde_json::Value, String> {
     let snap = state.lock().map_err(|e| e.to_string())?;
-    serde_json::to_value(&*snap).map_err(|e| e.to_string())
+    let resp = StateResponse::from(&*snap);
+    serde_json::to_value(&resp).map_err(|e| e.to_string())
 }
 
 /// Show or hide the bubbles window.

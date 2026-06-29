@@ -91,24 +91,26 @@ async function poll() {
     lastState = stateKey;
 
     const attention = state.attention || [];
-    const companionState = (state.state || "idle").toLowerCase();
+    const resolved = state.resolved_animation || state.state || "idle";
 
     let status = null;
     let item = null;
 
-    if (attention.some((a) => a.status === "approval")) {
+    // Priority chain is resolved by the Rust backend — frontend just maps to card states.
+    if (resolved === "waiting") {
       status = "approval";
       item = attention.find((a) => a.status === "approval");
-    } else if (attention.some((a) => a.status === "clarify")) {
+    } else if (resolved === "review") {
       status = "clarify";
       item = attention.find((a) => a.status === "clarify");
-    } else if (companionState === "running") {
+    } else if (resolved === "running") {
       status = "running";
       item = attention[0];
-    } else if (companionState === "ready") {
+    } else if (resolved === "waving") {
       status = "ready";
       item = attention[0];
     }
+    // idle / failed → status stays null → card hides (fixes: failed state previously leaked)
 
     if (status) {
       card.className = `visible status-${status}`;

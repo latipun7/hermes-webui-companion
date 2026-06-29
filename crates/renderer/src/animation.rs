@@ -54,6 +54,51 @@ pub struct CompanionSnapshot {
 }
 
 // ---------------------------------------------------------------------------
+// Animation state helpers
+// ---------------------------------------------------------------------------
+
+impl AnimationState {
+    /// Return the lowercase string representation for frontend consumption.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::RunningRight => "running-right",
+            Self::RunningLeft => "running-left",
+            Self::Waving => "waving",
+            Self::Jumping => "jumping",
+            Self::Failed => "failed",
+            Self::Waiting => "waiting",
+            Self::Running => "running",
+            Self::Review => "review",
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// API response types
+// ---------------------------------------------------------------------------
+
+/// Wraps a `CompanionSnapshot` with the resolved animation state so frontends
+/// don't need to re-implement priority logic.
+#[derive(Debug, Serialize)]
+pub struct StateResponse {
+    pub state: CompanionState,
+    pub attention: Vec<AttentionItem>,
+    /// Resolved animation state string (e.g. "idle", "waiting", "failed").
+    pub resolved_animation: String,
+}
+
+impl From<&CompanionSnapshot> for StateResponse {
+    fn from(snap: &CompanionSnapshot) -> Self {
+        Self {
+            state: snap.state.clone(),
+            attention: snap.attention.clone(),
+            resolved_animation: resolve_animation_state(snap).as_str().to_string(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // State machine
 // ---------------------------------------------------------------------------
 
@@ -193,5 +238,34 @@ mod tests {
             vec![AttentionStatus::Approval, AttentionStatus::Clarify],
         );
         assert_eq!(resolve_animation_state(&snap), AnimationState::Failed);
+    }
+
+    #[test]
+    fn as_str_returns_lowercase() {
+        assert_eq!(AnimationState::Idle.as_str(), "idle");
+        assert_eq!(AnimationState::Running.as_str(), "running");
+        assert_eq!(AnimationState::Waving.as_str(), "waving");
+        assert_eq!(AnimationState::Waiting.as_str(), "waiting");
+        assert_eq!(AnimationState::Review.as_str(), "review");
+        assert_eq!(AnimationState::Failed.as_str(), "failed");
+    }
+
+    #[test]
+    fn state_response_includes_resolved_animation() {
+        let snap = snapshot(
+            CompanionState::Running,
+            vec![AttentionStatus::Approval],
+        );
+        let resp = StateResponse::from(&snap);
+        assert_eq!(resp.resolved_animation, "waiting"); // Approval beats Running
+        assert_eq!(resp.state, CompanionState::Running);
+        assert_eq!(resp.attention.len(), 1);
+    }
+
+    #[test]
+    fn state_response_idle() {
+        let snap = snapshot(CompanionState::Idle, vec![]);
+        let resp = StateResponse::from(&snap);
+        assert_eq!(resp.resolved_animation, "idle");
     }
 }

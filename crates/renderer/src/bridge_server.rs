@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crate::animation::CompanionSnapshot;
+use crate::animation::{CompanionSnapshot, StateResponse};
 use crate::bridge::parse_snapshot;
 
 /// Log only when HERMES_COMPANION_DEBUG=1.
@@ -100,9 +100,10 @@ pub fn spawn_bridge_server(state: BridgeState) {
             // ── GET /api/state ─────────────────────────────────────
             if method == "GET" && (path == "/api/state" || path == "/api/state/") {
                 let body = if let Ok(guard) = snapshot.lock() {
-                    serde_json::to_string(&*guard).unwrap_or_else(|_| "{}".into())
+                    let resp = StateResponse::from(&*guard);
+                    serde_json::to_string(&resp).unwrap_or_else(|_| "{}".into())
                 } else {
-                    "{\"state\":\"Idle\",\"attention\":[]}".to_string()
+                    "{\"state\":\"Idle\",\"attention\":[],\"resolved_animation\":\"idle\"}".to_string()
                 };
                 let response = cors_response(200, &body);
                 let _ = stream.write_all(response.as_bytes());

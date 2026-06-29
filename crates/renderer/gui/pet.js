@@ -20,15 +20,16 @@ const STATE_ROWS = {
   review: 8,
 };
 
-// Companion state → animation state (matches reference project)
+// Companion state → animation state mapping.
+// resolved_animation comes from the Rust backend — frontend just passes it through.
 const COMPANION_STATE_MAP = {
   idle: "idle",
   running: "running",
-  ready: "waving",       // session completed → wave
+  ready: "waving",
   approval: "waiting",
   clarify: "review",
   error: "failed",
-  failed: "failed",      // sidecar unreachable (set by bridge)
+  failed: "failed",
 };
 
 let currentState = "idle";
@@ -176,22 +177,26 @@ async function pollCompanionState() {
   try {
     const state = await invokeTauri("get_companion_state");
 
-    // Bridge signals sidecar failure → failed animation takes priority
-    if (state.state === "failed") {
+    // Bridge signals sidecar failure → failed animation takes priority.
+    // The resolved_animation field already encodes the full priority chain
+    // (Failed > Approval > Clarify > agent state) computed by the Rust backend.
+    if (state.resolved_animation) {
+      setAnimationState(state.resolved_animation);
+    } else if (state.state === "failed") {
+      // Backward compat: older backend without resolved_animation
       setAnimationState("failed");
-      return;
-    }
-
-    const attention = state.attention || [];
-    const hasApproval = attention.some((a) => a.status === "approval");
-    const hasClarify = attention.some((a) => a.status === "clarify");
-
-    if (hasApproval) {
-      setAnimationState("approval");
-    } else if (hasClarify) {
-      setAnimationState("clarify");
     } else {
-      setAnimationState(state.state || "idle");
+      const attention = state.attention || [];
+      const hasApproval = attention.some((a) => a.status === "approval");
+      const hasClarify = attention.some((a) => a.status === "clarify");
+
+      if (hasApproval) {
+        setAnimationState("approval");
+      } else if (hasClarify) {
+        setAnimationState("clarify");
+      } else {
+        setAnimationState(state.state || "idle");
+      }
     }
   } catch (e) {
     // Bridge unreachable — keep current state; don't override to idle
