@@ -96,6 +96,33 @@ impl SidecarClient {
                 }))
         }
     }
+    /// Check whether the sidecar is healthy (application-level).
+    ///
+    /// Hits `GET /health` and returns `true` only if the sidecar responds
+    /// with HTTP 200 and `{"ok": true}`. Returns `false` on network errors,
+    /// non-200 status, malformed JSON, or missing/mismatched `ok` field.
+    ///
+    /// This is preferred over a raw TCP connect because it verifies the
+    /// application layer is functional, not just the port is open.
+    pub fn check_health(&self) -> bool {
+        let url = format!("{}/health", self.base_url);
+        match ureq::get(&url)
+            .config()
+            .http_status_as_error(false)
+            .build()
+            .call()
+        {
+            Ok(response) if response.status() == 200 => {
+                response
+                    .into_body()
+                    .read_json::<serde_json::Value>()
+                    .ok()
+                    .and_then(|v| v.get("ok").and_then(|ok| ok.as_bool()))
+                    .unwrap_or(false)
+            }
+            _ => false,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -176,5 +203,40 @@ mod tests {
         let client = SidecarClient::new(format!("http://127.0.0.1:{}", port));
         let bytes = client.fetch_spritesheet("boba").unwrap();
         assert_eq!(bytes, b"fake-webp-data");
+    }
+
+    #[test]
+    fn check_health_returns_true() {
+        let port = serve_once(200, r#"{"ok":true,"service":"hermes-webui-companion-sidecar"}"#);
+        let client = SidecarClient::new(format!("http://127.0.0.1:{}", port));
+        assert!(client.check_health());
+    }
+
+    #[test]
+    fn check_health_returns_false_on_404() {
+        let port = serve_once(404, r#"{"error":"not_found"}"#);
+        let client = SidecarClient::new(format!("http://127.0.0.1:{}", port));
+        assert!(!client.check_health());
+    }
+
+    #[test]
+    fn check_health_returns_false_on_bad_json() {
+        let port = serve_once(200, "not json");
+        let client = SidecarClient::new(format!("http://127.0.0.1:{}", port));
+        assert!(!client.check_health());
+    }
+
+    #[test]
+    fn check_health_returns_false_on_ok_false() {
+        let port = serve_once(200, r#"{"ok":false}"#);
+        let client = SidecarClient::new(format!("http://127.0.0.1:{}", port));
+        assert!(!client.check_health());
+    }
+
+    #[test]
+    fn check_health_returns_false_on_missing_ok() {
+        let port = serve_once(200, r#"{"service":"test"}"#);
+        let client = SidecarClient::new(format!("http://127.0.0.1:{}", port));
+        assert!(!client.check_health());
     }
 }
