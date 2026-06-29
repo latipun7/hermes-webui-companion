@@ -1,7 +1,7 @@
 //! Tauri command handlers for the desktop companion renderer.
 //!
 //! Each function is a `#[tauri::command]` invoked from the frontend
-//! via `invokeTauri()` or direct HTTP fallback.
+//! via `invokeTauri()` over Tauri IPC.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};

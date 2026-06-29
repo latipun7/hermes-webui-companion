@@ -32,11 +32,8 @@ pub struct RawAttentionItem {
     pub status: Option<String>,
     #[allow(dead_code)]
     pub title: Option<String>,
-    #[allow(dead_code)]
     pub text: Option<String>,
-    #[allow(dead_code)]
     pub session_id: Option<String>,
-    #[allow(dead_code)]
     pub action_required_type: Option<String>,
 }
 

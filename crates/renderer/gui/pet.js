@@ -20,18 +20,6 @@ const STATE_ROWS = {
   review: 8,
 };
 
-// Companion state → animation state mapping.
-// resolved_animation comes from the Rust backend — frontend just passes it through.
-const COMPANION_STATE_MAP = {
-  idle: "idle",
-  running: "running",
-  ready: "waving",
-  approval: "waiting",
-  clarify: "review",
-  error: "failed",
-  failed: "failed",
-};
-
 let currentState = "idle";
 let currentCol = 0;
 // Frame counts per state (most petdex sprites use 6-8 frames)
@@ -112,9 +100,9 @@ function startAnimation() {
 }
 
 function setAnimationState(state) {
-  const mapped = COMPANION_STATE_MAP[state] || "idle";
-  if (mapped !== currentState) {
-    currentState = mapped;
+  // resolved_animation returns the correct spritesheet state name directly.
+  if (state && state !== currentState) {
+    currentState = state;
     currentCol = 0;
   }
 }
@@ -157,28 +145,8 @@ async function pollCompanionState() {
 
   try {
     const state = await invokeTauri("get_companion_state");
-
-    // Bridge signals sidecar failure → failed animation takes priority.
-    // The resolved_animation field already encodes the full priority chain
-    // (Failed > Approval > Clarify > agent state) computed by the Rust backend.
-    if (state.resolved_animation) {
-      setAnimationState(state.resolved_animation);
-    } else if (state.state === "failed") {
-      // Backward compat: older backend without resolved_animation
-      setAnimationState("failed");
-    } else {
-      const attention = state.attention || [];
-      const hasApproval = attention.some((a) => a.status === "approval");
-      const hasClarify = attention.some((a) => a.status === "clarify");
-
-      if (hasApproval) {
-        setAnimationState("approval");
-      } else if (hasClarify) {
-        setAnimationState("clarify");
-      } else {
-        setAnimationState(state.state || "idle");
-      }
-    }
+    // resolved_animation encodes the full priority chain (Failed > Approval > Clarify > agent state)
+    setAnimationState(state.resolved_animation || "idle");
   } catch (e) {
     // Bridge unreachable — keep current state; don't override to idle
   }

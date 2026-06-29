@@ -64,7 +64,6 @@ pub const STANDARD_LAYOUT: GridLayout = GridLayout {
 
 /// Error type for spritesheet parsing.
 #[derive(Debug)]
-#[allow(dead_code)]
 pub enum SpritesheetError {
     /// The image data could not be decoded.
     Decode(String),

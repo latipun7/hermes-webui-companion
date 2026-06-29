@@ -106,14 +106,13 @@ impl StateResponse {
 // State machine
 // ---------------------------------------------------------------------------
 
-/// Priority: sidecar down > Failed > Approval > Clarify > agent state.
+/// Priority: sidecar down > Approval > Clarify > agent state.
 ///
 /// When `sidecar_healthy` is `false`, always returns `Failed` regardless of
 /// the snapshot content — this prevents race conditions where incoming WebUI
 /// snapshots overwrite a health-check-triggered Failed state.
 ///
 /// - `sidecar_healthy == false` → `Failed` (overrides everything)
-/// - `CompanionState::Failed` → `Failed` (backward compat)
 /// - Any `Approval` attention item → `Waiting`
 /// - Any `Clarify` attention item → `Review`
 /// - `CompanionState::Running` → `Running`
@@ -124,11 +123,6 @@ pub fn resolve_animation_state(snapshot: &CompanionSnapshot, sidecar_healthy: bo
     // This flag is set by the health-check thread; incoming WebUI snapshots
     // cannot override it, preventing a flicker loop (Failed → Ready → Failed).
     if !sidecar_healthy {
-        return AnimationState::Failed;
-    }
-
-    // Failed takes highest priority — sidecar unreachable means no pet data
-    if snapshot.state == CompanionState::Failed {
         return AnimationState::Failed;
     }
 
@@ -242,12 +236,23 @@ mod tests {
     }
 
     #[test]
-    fn failed_beats_approval() {
+    fn failed_state_falls_through_when_healthy() {
+        // When sidecar IS healthy, CompanionState::Failed does NOT override.
+        // Only !sidecar_healthy triggers the Failed animation.
         let snap = snapshot(
             CompanionState::Failed,
             vec![AttentionStatus::Approval, AttentionStatus::Clarify],
         );
-        assert_eq!(resolve_animation_state(&snap, true), AnimationState::Failed);
+        assert_eq!(resolve_animation_state(&snap, true), AnimationState::Waiting);
+    }
+
+    #[test]
+    fn failed_beats_approval_when_unhealthy() {
+        let snap = snapshot(
+            CompanionState::Failed,
+            vec![AttentionStatus::Approval, AttentionStatus::Clarify],
+        );
+        assert_eq!(resolve_animation_state(&snap, false), AnimationState::Failed);
     }
 
     #[test]
