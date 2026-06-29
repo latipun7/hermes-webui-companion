@@ -10,10 +10,17 @@ use companion_renderer::animation::{CompanionSnapshot, StateResponse};
 use companion_renderer::sidecar_client::SidecarClient;
 use tauri;
 
+use crate::debug;
+
 #[tauri::command]
 pub fn get_active_pet() -> Result<serde_json::Value, String> {
+    debug!("[companion:cmd] get_active_pet");
     let client = SidecarClient::new("http://127.0.0.1:17888".into());
-    let pet = client.fetch_active_pet().map_err(|e| e.error)?;
+    let pet = client.fetch_active_pet().map_err(|e| {
+        debug!("[companion:cmd] get_active_pet failed: {}", e.error);
+        e.error
+    })?;
+    debug!("[companion:cmd] active pet: slug={}", pet.slug);
     Ok(serde_json::json!({
         "slug": pet.slug,
         "spritesheet_url": pet.spritesheet_url,
@@ -23,8 +30,12 @@ pub fn get_active_pet() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub fn get_spritesheet(slug: String) -> Result<Vec<u8>, String> {
+    debug!("[companion:cmd] get_spritesheet slug={}", slug);
     let client = SidecarClient::new("http://127.0.0.1:17888".into());
-    client.fetch_spritesheet(&slug).map_err(|e| e.error)
+    client.fetch_spritesheet(&slug).map_err(|e| {
+        debug!("[companion:cmd] get_spritesheet failed: {}", e.error);
+        e.error
+    })
 }
 
 #[tauri::command]

@@ -17,7 +17,7 @@ use companion_renderer::bridge_server::{self, BridgeState};
 use tauri::Manager;
 
 use crate::bubble::{reposition_bubble, spawn_bubble_visibility_poller};
-use crate::debug::{debug, ASPECT_RATIO};
+use crate::debug::{ASPECT_RATIO, debug};
 use crate::health::spawn_health_check;
 
 fn main() {
@@ -78,9 +78,9 @@ fn main() {
                         }
                         let new_height = (size.width as f64 / ASPECT_RATIO).round() as u32;
                         if (new_height as f64 - size.height as f64).abs() > 1.0 {
-                            let _ = win2.set_size(tauri::Size::Physical(
-                                tauri::PhysicalSize::new(size.width, new_height),
-                            ));
+                            let _ = win2.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
+                                size.width, new_height,
+                            )));
                         }
                         reposition_bubble(&win2, &bubbles);
                         resizing.store(false, Ordering::SeqCst);

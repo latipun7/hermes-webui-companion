@@ -55,29 +55,10 @@ let animTimer = null;
 
 async function invokeTauri(cmd, args = {}) {
   if (window.__TAURI__) {
-    const invoke = window.__TAURI__.invoke || window.__TAURI__?.core?.invoke;
-    if (invoke) return invoke(cmd, args);
+    const invoke = window.__TAURI__.invoke || window.__TAURI__.core?.invoke;
+    if (typeof invoke === "function") return invoke(cmd, args);
   }
-  // Fallback: direct HTTP to sidecar or bridge
-  const base = "http://127.0.0.1:17888";
-  if (cmd === "get_active_pet") {
-    const res = await fetch(`${base}/api/pet/active`);
-    return res.json();
-  }
-  if (cmd === "get_spritesheet") {
-    const res = await fetch(`${base}/pets/${args.slug}/spritesheet.webp`);
-    const blob = await res.blob();
-    return new Uint8Array(await blob.arrayBuffer());
-  }
-  // Bridge state lives on :17787 — fetch directly as fallback
-  if (cmd === "get_companion_state") {
-    const res = await fetch("http://127.0.0.1:17787/api/state");
-    return res.json();
-  }
-  if (cmd === "start_dragging") {
-    return null; // requires Tauri IPC
-  }
-  throw new Error(`Unknown command: ${cmd}`);
+  throw new Error(`Tauri IPC unavailable — cannot invoke ${cmd}`);
 }
 
 // ---------------------------------------------------------------------------

@@ -19,7 +19,7 @@ pub fn spawn_health_check() -> Arc<AtomicBool> {
     .is_ok();
 
     if !initial_healthy {
-        debug!("[companion] sidecar unreachable at startup → Failed");
+        debug!("[companion:health] sidecar unreachable at startup → Failed");
     }
 
     let sidecar_healthy = Arc::new(AtomicBool::new(initial_healthy));
@@ -35,9 +35,9 @@ pub fn spawn_health_check() -> Arc<AtomicBool> {
             .is_ok();
             let was = sidecar_healthy.swap(healthy, Ordering::SeqCst);
             if !healthy && was {
-                debug!("[companion] sidecar unreachable → Failed");
+                debug!("[companion:health] sidecar unreachable → Failed");
             } else if healthy && !was {
-                debug!("[companion] sidecar recovered → Idle");
+                debug!("[companion:health] sidecar recovered → Idle");
             }
         });
     }

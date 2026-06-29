@@ -10,6 +10,7 @@
     "beforeBuildCommand": null
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "label": "main",
@@ -23,7 +24,8 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "shadow": false,
-        "dragDropEnabled": true
+        "dragDropEnabled": true,
+        "devtools": true
       },
       {
         "label": "bubbles",
@@ -41,7 +43,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob: http://127.0.0.1:17888; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://127.0.0.1:17787"
+      "csp": null
     }
   },
   "bundle": {

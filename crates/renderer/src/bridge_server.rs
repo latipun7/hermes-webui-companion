@@ -120,14 +120,14 @@ fn handle_post_snapshot(body: &[u8], snapshot: &Mutex<CompanionSnapshot>) -> Htt
     match serde_json::from_slice(body) {
         Ok(raw) => {
             let snap = parse_snapshot(&raw);
-            debug!("[companion] state={:?} attention={}", snap.state, snap.attention.len());
+            debug!("[companion:bridge] state={:?} attention={}", snap.state, snap.attention.len());
             if let Ok(mut guard) = snapshot.lock() {
                 *guard = snap;
             }
             HttpResponse::ok(r#"{"ok":true}"#.into())
         }
         Err(_) => {
-            debug!("[companion] failed to parse POST body");
+            debug!("[companion:bridge] failed to parse POST body");
             HttpResponse::ok(r#"{"ok":false,"error":"invalid_json"}"#.into())
         }
     }
@@ -214,7 +214,7 @@ pub fn spawn_bridge_server(state: BridgeState) {
     let sidecar_healthy = state.sidecar_healthy;
 
     std::thread::spawn(move || {
-        debug!("[companion] bridge server listening on 127.0.0.1:17787");
+        debug!("[companion:bridge] server listening on 127.0.0.1:17787");
         for mut request in server.incoming_requests() {
             let response = route_request(&mut request, &snapshot, &navigation, &bubbles_visible, &sidecar_healthy);
             let _ = request.respond(response);
@@ -234,7 +234,7 @@ fn route_request(
     let method = req.method();
     let url = req.url().to_string();
 
-    debug!("[companion] {} {}", method, url);
+    debug!("[companion:bridge] {} {}", method, url);
 
     let handler_result = match (method, url.as_str()) {
         (Method::Get, "/health") | (Method::Get, "/health/") => handle_health(),

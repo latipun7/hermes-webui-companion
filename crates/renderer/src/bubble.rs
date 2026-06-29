@@ -53,7 +53,7 @@ pub fn spawn_bubble_visibility_poller(
             } else {
                 let _ = bw.hide();
             }
-            debug!("[companion] bubbles window visible = {want}");
+            debug!("[companion:bubble] bubbles window visible = {want}");
         }
     });
 }
