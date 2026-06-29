@@ -88,12 +88,16 @@ pub struct StateResponse {
     pub resolved_animation: String,
 }
 
-impl From<&CompanionSnapshot> for StateResponse {
-    fn from(snap: &CompanionSnapshot) -> Self {
+impl StateResponse {
+    /// Build a response from the snapshot and sidecar health flag.
+    ///
+    /// The `sidecar_healthy` flag comes from the health-check thread and
+    /// overrides any snapshot state when the sidecar is unreachable.
+    pub fn from_snapshot(snap: &CompanionSnapshot, sidecar_healthy: bool) -> Self {
         Self {
             state: snap.state.clone(),
             attention: snap.attention.clone(),
-            resolved_animation: resolve_animation_state(snap).as_str().to_string(),
+            resolved_animation: resolve_animation_state(snap, sidecar_healthy).as_str().to_string(),
         }
     }
 }
@@ -102,15 +106,27 @@ impl From<&CompanionSnapshot> for StateResponse {
 // State machine
 // ---------------------------------------------------------------------------
 
-/// Priority: Failed > Approval > Clarify > agent state.
+/// Priority: sidecar down > Failed > Approval > Clarify > agent state.
 ///
-/// - `CompanionState::Failed` → `Failed` (sidecar unreachable, no pet data)
+/// When `sidecar_healthy` is `false`, always returns `Failed` regardless of
+/// the snapshot content — this prevents race conditions where incoming WebUI
+/// snapshots overwrite a health-check-triggered Failed state.
+///
+/// - `sidecar_healthy == false` → `Failed` (overrides everything)
+/// - `CompanionState::Failed` → `Failed` (backward compat)
 /// - Any `Approval` attention item → `Waiting`
 /// - Any `Clarify` attention item → `Review`
 /// - `CompanionState::Running` → `Running`
 /// - `CompanionState::Ready` → `Waving`
 /// - `CompanionState::Idle` → `Idle`
-pub fn resolve_animation_state(snapshot: &CompanionSnapshot) -> AnimationState {
+pub fn resolve_animation_state(snapshot: &CompanionSnapshot, sidecar_healthy: bool) -> AnimationState {
+    // Sidecar health takes absolute highest priority.
+    // This flag is set by the health-check thread; incoming WebUI snapshots
+    // cannot override it, preventing a flicker loop (Failed → Ready → Failed).
+    if !sidecar_healthy {
+        return AnimationState::Failed;
+    }
+
     // Failed takes highest priority — sidecar unreachable means no pet data
     if snapshot.state == CompanionState::Failed {
         return AnimationState::Failed;
@@ -168,37 +184,31 @@ mod tests {
     #[test]
     fn idle_snapshot_maps_to_idle() {
         let snap = snapshot(CompanionState::Idle, vec![]);
-        assert_eq!(resolve_animation_state(&snap), AnimationState::Idle);
+        assert_eq!(resolve_animation_state(&snap, true), AnimationState::Idle);
     }
 
     #[test]
     fn running_snapshot_maps_to_running() {
         let snap = snapshot(CompanionState::Running, vec![]);
-        assert_eq!(resolve_animation_state(&snap), AnimationState::Running);
+        assert_eq!(resolve_animation_state(&snap, true), AnimationState::Running);
     }
 
     #[test]
     fn ready_snapshot_maps_to_waving() {
         let snap = snapshot(CompanionState::Ready, vec![]);
-        assert_eq!(resolve_animation_state(&snap), AnimationState::Waving);
+        assert_eq!(resolve_animation_state(&snap, true), AnimationState::Waving);
     }
 
     #[test]
     fn approval_takes_priority_over_state() {
-        let snap = snapshot(
-            CompanionState::Running,
-            vec![AttentionStatus::Approval],
-        );
-        assert_eq!(resolve_animation_state(&snap), AnimationState::Waiting);
+        let snap = snapshot(CompanionState::Running, vec![AttentionStatus::Approval]);
+        assert_eq!(resolve_animation_state(&snap, true), AnimationState::Waiting);
     }
 
     #[test]
     fn clarify_takes_priority_over_ready() {
-        let snap = snapshot(
-            CompanionState::Ready,
-            vec![AttentionStatus::Clarify],
-        );
-        assert_eq!(resolve_animation_state(&snap), AnimationState::Review);
+        let snap = snapshot(CompanionState::Ready, vec![AttentionStatus::Clarify]);
+        assert_eq!(resolve_animation_state(&snap, true), AnimationState::Review);
     }
 
     #[test]
@@ -207,7 +217,7 @@ mod tests {
             CompanionState::Idle,
             vec![AttentionStatus::Clarify, AttentionStatus::Approval],
         );
-        assert_eq!(resolve_animation_state(&snap), AnimationState::Waiting);
+        assert_eq!(resolve_animation_state(&snap, true), AnimationState::Waiting);
     }
 
     #[test]
@@ -216,19 +226,19 @@ mod tests {
             CompanionState::Running,
             vec![AttentionStatus::Running, AttentionStatus::Ready],
         );
-        assert_eq!(resolve_animation_state(&snap), AnimationState::Running);
+        assert_eq!(resolve_animation_state(&snap, true), AnimationState::Running);
     }
 
     #[test]
     fn empty_attention_falls_through_to_state() {
         let snap = snapshot(CompanionState::Idle, vec![]);
-        assert_eq!(resolve_animation_state(&snap), AnimationState::Idle);
+        assert_eq!(resolve_animation_state(&snap, true), AnimationState::Idle);
     }
 
     #[test]
     fn failed_state_maps_to_failed_animation() {
         let snap = snapshot(CompanionState::Failed, vec![]);
-        assert_eq!(resolve_animation_state(&snap), AnimationState::Failed);
+        assert_eq!(resolve_animation_state(&snap, true), AnimationState::Failed);
     }
 
     #[test]
@@ -237,7 +247,18 @@ mod tests {
             CompanionState::Failed,
             vec![AttentionStatus::Approval, AttentionStatus::Clarify],
         );
-        assert_eq!(resolve_animation_state(&snap), AnimationState::Failed);
+        assert_eq!(resolve_animation_state(&snap, true), AnimationState::Failed);
+    }
+
+    #[test]
+    fn sidecar_unhealthy_overrides_everything() {
+        // Even when snapshot is idle with no attention, unhealthy sidecar → Failed
+        let snap = snapshot(CompanionState::Idle, vec![]);
+        assert_eq!(resolve_animation_state(&snap, false), AnimationState::Failed);
+
+        // Even with approval pending, sidecar health beats it
+        let snap = snapshot(CompanionState::Running, vec![AttentionStatus::Approval]);
+        assert_eq!(resolve_animation_state(&snap, false), AnimationState::Failed);
     }
 
     #[test]
@@ -252,11 +273,8 @@ mod tests {
 
     #[test]
     fn state_response_includes_resolved_animation() {
-        let snap = snapshot(
-            CompanionState::Running,
-            vec![AttentionStatus::Approval],
-        );
-        let resp = StateResponse::from(&snap);
+        let snap = snapshot(CompanionState::Running, vec![AttentionStatus::Approval]);
+        let resp = StateResponse::from_snapshot(&snap, true);
         assert_eq!(resp.resolved_animation, "waiting"); // Approval beats Running
         assert_eq!(resp.state, CompanionState::Running);
         assert_eq!(resp.attention.len(), 1);
@@ -265,7 +283,16 @@ mod tests {
     #[test]
     fn state_response_idle() {
         let snap = snapshot(CompanionState::Idle, vec![]);
-        let resp = StateResponse::from(&snap);
+        let resp = StateResponse::from_snapshot(&snap, true);
         assert_eq!(resp.resolved_animation, "idle");
+    }
+
+    #[test]
+    fn state_response_unhealthy_sidecar() {
+        let snap = snapshot(CompanionState::Ready, vec![AttentionStatus::Approval]);
+        let resp = StateResponse::from_snapshot(&snap, false);
+        assert_eq!(resp.resolved_animation, "failed"); // sidecar down overrides approval
+        assert_eq!(resp.state, CompanionState::Ready);  // original state preserved
+        assert_eq!(resp.attention.len(), 1);
     }
 }

@@ -52,6 +52,7 @@ pub struct BridgeState {
     pub snapshot: Arc<Mutex<CompanionSnapshot>>,
     pub navigation: Arc<Mutex<Option<NavigationCommand>>>,
     pub bubbles_visible: Arc<AtomicBool>,
+    pub sidecar_healthy: Arc<AtomicBool>,
 }
 
 /// Spawn a background HTTP server that accepts POST snapshots
@@ -68,6 +69,7 @@ pub fn spawn_bridge_server(state: BridgeState) {
     let snapshot = state.snapshot;
     let navigation = state.navigation;
     let bubbles_visible = state.bubbles_visible;
+    let sidecar_healthy = state.sidecar_healthy;
 
     thread::spawn(move || {
         for conn in listener.incoming() {
@@ -100,7 +102,8 @@ pub fn spawn_bridge_server(state: BridgeState) {
             // ── GET /api/state ─────────────────────────────────────
             if method == "GET" && (path == "/api/state" || path == "/api/state/") {
                 let body = if let Ok(guard) = snapshot.lock() {
-                    let resp = StateResponse::from(&*guard);
+                    let healthy = sidecar_healthy.load(Ordering::SeqCst);
+                    let resp = StateResponse::from_snapshot(&guard, healthy);
                     serde_json::to_string(&resp).unwrap_or_else(|_| "{}".into())
                 } else {
                     "{\"state\":\"Idle\",\"attention\":[],\"resolved_animation\":\"idle\"}".to_string()

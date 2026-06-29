@@ -78,9 +78,11 @@ fn open_webui() {
 #[tauri::command]
 fn get_companion_state(
     state: tauri::State<Arc<Mutex<CompanionSnapshot>>>,
+    sidecar_healthy: tauri::State<Arc<AtomicBool>>,
 ) -> Result<serde_json::Value, String> {
     let snap = state.lock().map_err(|e| e.to_string())?;
-    let resp = StateResponse::from(&*snap);
+    let healthy = sidecar_healthy.load(Ordering::SeqCst);
+    let resp = StateResponse::from_snapshot(&snap, healthy);
     serde_json::to_value(&resp).map_err(|e| e.to_string())
 }
 
@@ -106,12 +108,26 @@ fn main() {
     let nav_command: Arc<Mutex<Option<bridge_server::NavigationCommand>>> =
         Arc::new(Mutex::new(None));
     let bubbles_visible = Arc::new(AtomicBool::new(true));
+    // ── Initial sidecar health check (synchronous) ─────────────
+    // Run once before spawning the background thread so the app
+    // knows immediately whether the sidecar is reachable.
+    let initial_healthy = std::net::TcpStream::connect_timeout(
+        &"127.0.0.1:17888".parse().unwrap(),
+        std::time::Duration::from_secs(2),
+    )
+    .is_ok();
+    if !initial_healthy {
+        debug!("[companion] sidecar unreachable at startup → Failed");
+    }
+    let sidecar_healthy = Arc::new(AtomicBool::new(initial_healthy));
 
-    // ── Sidecar health check thread ──────────────────────────────
-    // Periodically probes the sidecar (:17888). If unreachable,
-    // sets companion state to Failed so the pet shows the failed animation.
+    // ── Sidecar health check thread (background) ──────────────
+    // Periodically probes the sidecar (:17888). Sets a flag consumed
+    // by resolve_animation_state() — does NOT overwrite the snapshot,
+    // so incoming WebUI snapshots can't race the health check and
+    // cause a flicker loop (Failed → Ready → Failed → …).
     {
-        let state_for_health = companion_state.clone();
+        let sidecar_healthy = sidecar_healthy.clone();
         std::thread::spawn(move || loop {
             std::thread::sleep(std::time::Duration::from_secs(10));
             let healthy = std::net::TcpStream::connect_timeout(
@@ -119,20 +135,18 @@ fn main() {
                 std::time::Duration::from_secs(2),
             )
             .is_ok();
-            if let Ok(mut guard) = state_for_health.lock() {
-                if !healthy && guard.state != CompanionState::Failed {
-                    debug!("[companion] sidecar unreachable → Failed");
-                    guard.state = CompanionState::Failed;
-                } else if healthy && guard.state == CompanionState::Failed {
-                    debug!("[companion] sidecar recovered → Idle");
-                    guard.state = CompanionState::Idle;
-                }
+            let was = sidecar_healthy.swap(healthy, Ordering::SeqCst);
+            if !healthy && was {
+                debug!("[companion] sidecar unreachable → Failed");
+            } else if healthy && !was {
+                debug!("[companion] sidecar recovered → Idle");
             }
         });
     }
 
     tauri::Builder::default()
         .manage(companion_state.clone())
+        .manage(sidecar_healthy.clone())
         .invoke_handler(tauri::generate_handler![
             get_active_pet,
             get_spritesheet,
@@ -146,6 +160,7 @@ fn main() {
                 snapshot: companion_state,
                 navigation: nav_command,
                 bubbles_visible: bubbles_visible.clone(),
+                sidecar_healthy: sidecar_healthy.clone(),
             });
 
             let window = app
