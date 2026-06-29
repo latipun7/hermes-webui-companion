@@ -4,6 +4,8 @@
 //! bubble tracking, Tauri commands, and window event handlers. All heavy logic
 //! lives in sibling modules.
 
+#![windows_subsystem = "windows"]
+
 mod bubble;
 mod commands;
 mod debug;

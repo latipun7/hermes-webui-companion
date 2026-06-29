@@ -45,9 +45,24 @@ pub fn start_dragging(window: tauri::WebviewWindow) {
 
 #[tauri::command]
 pub fn open_webui() {
-    let _ = std::process::Command::new("cmd")
-        .args(["/c", "start", "", "http://localhost:8787"])
-        .spawn();
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(["/c", "start", "", "http://localhost:8787"])
+            .spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .arg("http://localhost:8787")
+            .spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open")
+            .arg("http://localhost:8787")
+            .spawn();
+    }
 }
 
 #[tauri::command]
