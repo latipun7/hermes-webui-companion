@@ -15,7 +15,6 @@ let cardHasContent = false; // tracks whether card is currently showing content
 // ── Auto-hide via bridge ───────────────────────────────────
 
 async function setBubbleVisible(visible) {
-  if (visible === cardHasContent) return; // no change
   try {
     await fetch("http://127.0.0.1:17787/api/bubbles/visible", {
       method: "POST",

@@ -22,6 +22,9 @@ const STATE_ROWS = {
 
 let currentState = "idle";
 let currentCol = 0;
+// User manually hid the bubble — suppress animation updates until state changes.
+let userMuted = false;
+let mutedState = null;
 // Frame counts per state (most petdex sprites use 6-8 frames)
 const FRAMES_PER_STATE = {
   idle: 6,
@@ -145,8 +148,18 @@ async function pollCompanionState() {
 
   try {
     const state = await invokeTauri("get_companion_state");
-    // resolved_animation encodes the full priority chain (Failed > Approval > Clarify > agent state)
-    setAnimationState(state.resolved_animation || "idle");
+    const resolved = state.resolved_animation || "idle";
+
+    if (userMuted) {
+      // Stay idle until the companion state actually changes
+      if (resolved !== mutedState) {
+        userMuted = false;
+        mutedState = null;
+        setAnimationState(resolved);
+      }
+    } else {
+      setAnimationState(resolved);
+    }
   } catch (e) {
     // Bridge unreachable — keep current state; don't override to idle
   }
@@ -211,6 +224,14 @@ function setupBubbleToggle() {
         body: JSON.stringify({ visible: bubblesVisible }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      // When hiding the bubble, pet goes idle and stays idle until
+      // the companion state actually changes (not just re-polled).
+      if (!bubblesVisible) {
+        userMuted = true;
+        mutedState = currentState;
+        setAnimationState("idle");
+      }
     } catch (err) {
       console.error("bubbles visible fetch failed:", err);
       flashButton("rgba(255, 100, 100, 0.9)", 400); // red: HTTP error
