@@ -1,19 +1,21 @@
-//! Tiny HTTP server that receives WebUI companion snapshots.
+//! HTTP bridge server — receives WebUI companion snapshots.
 //!
-//! Listens on 127.0.0.1:17787 for HTTP requests from the
-//! WebUI companion-adapter.js. Handles:
-//! - POST /api/webui/snapshot → update companion state
-//! - GET  /api/state → return current state
-//! - GET  /health → health check
-//! - GET  /api/pet/navigation?since= → pending navigation command
+//! Listens on 127.0.0.1:17787. Uses `tiny_http` for request parsing
+//! and routing. Core logic is extracted into pure handler functions
+//! so each endpoint can be tested without starting a real server.
+//!
+//! Endpoints:
+//! - GET  /health              → health check
+//! - GET  /api/state           → current companion state
+//! - GET  /api/bubbles/visible → bubble visibility flag
+//! - GET  /api/pet/navigation  → pending navigation command
 //! - POST /api/pet/navigation_ack → acknowledge navigation
-//! - POST /api/open-webui → open WebUI (legacy, bubble fallback)
+//! - POST /api/webui/snapshot  → receive WebUI snapshot
+//! - POST /api/bubbles/visible → set bubble visibility
+//! - POST /api/open-webui      → open/focus WebUI session
 
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpListener;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread;
 
 use crate::animation::{CompanionSnapshot, StateResponse};
 use crate::bridge::parse_snapshot;
@@ -27,25 +29,12 @@ macro_rules! debug {
     };
 }
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 /// A pending navigation command, consumed by companion-adapter.js.
 pub type NavigationCommand = serde_json::Value;
-
-fn cors_response(status: u16, body: &str) -> String {
-    format!(
-        "HTTP/1.1 {status} OK\r\n\
-         Content-Type: application/json\r\n\
-         Content-Length: {len}\r\n\
-         Access-Control-Allow-Origin: *\r\n\
-         Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\
-         Access-Control-Allow-Headers: Content-Type\r\n\
-         Connection: close\r\n\
-         \r\n\
-         {body}",
-        status = status,
-        len = body.len(),
-        body = body,
-    )
-}
 
 /// Shared state passed to the bridge server.
 pub struct BridgeState {
@@ -55,11 +44,164 @@ pub struct BridgeState {
     pub sidecar_healthy: Arc<AtomicBool>,
 }
 
-/// Spawn a background HTTP server that accepts POST snapshots
-/// and serves companion state + navigation commands.
+/// Minimal HTTP response for handler testing.
+#[derive(Debug, PartialEq)]
+#[allow(dead_code)]
+struct HttpResponse {
+    status: u16,
+    body: String,
+}
+
+#[allow(dead_code)]
+impl HttpResponse {
+    fn new(status: u16, body: String) -> Self {
+        Self { status, body }
+    }
+
+    fn ok(body: String) -> Self {
+        Self { status: 200, body }
+    }
+
+    fn not_found() -> Self {
+        Self {
+            status: 404,
+            body: r#"{"error":"not_found"}"#.into(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Route handlers (pure functions — testable without HTTP server)
+// ---------------------------------------------------------------------------
+
+#[allow(dead_code)]
+fn handle_health() -> HttpResponse {
+    HttpResponse::ok(r#"{"ok":true,"service":"hermes-webui-companion"}"#.into())
+}
+
+fn handle_get_state(snapshot: &Mutex<CompanionSnapshot>, sidecar_healthy: &AtomicBool) -> HttpResponse {
+    let body = if let Ok(guard) = snapshot.lock() {
+        let healthy = sidecar_healthy.load(Ordering::SeqCst);
+        let resp = StateResponse::from_snapshot(&guard, healthy);
+        serde_json::to_string(&resp).unwrap_or_else(|_| "{}".into())
+    } else {
+        r#"{"state":"Idle","attention":[],"resolved_animation":"idle"}"#.into()
+    };
+    HttpResponse::ok(body)
+}
+
+fn handle_get_bubbles_visible(flag: &AtomicBool) -> HttpResponse {
+    let v = flag.load(Ordering::SeqCst);
+    HttpResponse::ok(format!(r#"{{"visible":{v}}}"#))
+}
+
+fn handle_get_navigation(nav: &Mutex<Option<NavigationCommand>>) -> HttpResponse {
+    let body = if let Ok(guard) = nav.lock() {
+        if let Some(ref cmd) = *guard {
+            let json = serde_json::json!({ "command": cmd });
+            serde_json::to_string(&json).unwrap_or_else(|_| r#"{"command":null}"#.into())
+        } else {
+            r#"{"command":null}"#.into()
+        }
+    } else {
+        r#"{"command":null}"#.into()
+    };
+    HttpResponse::ok(body)
+}
+
+fn handle_post_navigation_ack(nav: &Mutex<Option<NavigationCommand>>) -> HttpResponse {
+    if let Ok(mut guard) = nav.lock() {
+        *guard = None;
+    }
+    HttpResponse::ok(r#"{"ok":true}"#.into())
+}
+
+fn handle_post_snapshot(body: &[u8], snapshot: &Mutex<CompanionSnapshot>) -> HttpResponse {
+    match serde_json::from_slice(body) {
+        Ok(raw) => {
+            let snap = parse_snapshot(&raw);
+            debug!("[companion] state={:?} attention={}", snap.state, snap.attention.len());
+            if let Ok(mut guard) = snapshot.lock() {
+                *guard = snap;
+            }
+            HttpResponse::ok(r#"{"ok":true}"#.into())
+        }
+        Err(_) => {
+            debug!("[companion] failed to parse POST body");
+            HttpResponse::ok(r#"{"ok":false,"error":"invalid_json"}"#.into())
+        }
+    }
+}
+
+fn handle_post_bubbles_visible(body: &[u8], flag: &AtomicBool) -> HttpResponse {
+    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(body) {
+        if let Some(v) = json.get("visible").and_then(|v| v.as_bool()) {
+            flag.store(v, Ordering::SeqCst);
+        }
+    }
+    HttpResponse::ok(r#"{"ok":true}"#.into())
+}
+
+fn handle_post_open_webui(body: &[u8], nav: &Mutex<Option<NavigationCommand>>) -> HttpResponse {
+    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(body) {
+        let sid = json
+            .get("session_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if !sid.is_empty() {
+            let cmd = serde_json::json!({
+                "id": format!("nav-{}", std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis()),
+                "session_id": sid,
+                "url": format!("/session/{}", sid),
+            });
+            if let Ok(mut guard) = nav.lock() {
+                *guard = Some(cmd);
+            }
+        }
+        // Focus existing browser window
+        #[cfg(target_os = "windows")]
+        {
+            let focus_url = if sid.is_empty() {
+                "http://localhost:8787".to_string()
+            } else {
+                format!("http://localhost:8787/session/{}", sid)
+            };
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                let ps = format!(
+                    "$w=(New-Object -ComObject WScript.Shell); \
+                     $found=$w.AppActivate('localhost:8787'); \
+                     if(-not $found){{$found=$w.AppActivate('WebUI')}}; \
+                     if(-not $found){{ \
+                       $browsers=@('zen','msedge','chrome','firefox','brave','opera','vivaldi','chromium','arc'); \
+                       foreach($b in $browsers){{ \
+                         $p=Get-Process -Name $b -ErrorAction SilentlyContinue|Where-Object{{$_.MainWindowHandle -ne 0}}|Select-Object -First 1; \
+                         if($p){{$w.AppActivate($p.Id)|Out-Null;$found=$true;break}} \
+                       }} \
+                     }}; \
+                     if(-not $found){{Start-Process '{url}'}}",
+                    url = focus_url
+                );
+                let _ = std::process::Command::new("powershell")
+                    .args(["-NoProfile", "-Command", &ps])
+                    .spawn();
+            });
+        }
+    }
+    HttpResponse::ok(r#"{"ok":true}"#.into())
+}
+
+// ---------------------------------------------------------------------------
+// Server (tiny_http) — only compiled with the "gui" feature
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "gui")]
 pub fn spawn_bridge_server(state: BridgeState) {
-    let listener = match TcpListener::bind("127.0.0.1:17787") {
-        Ok(l) => l,
+    let server = match tiny_http::Server::http("127.0.0.1:17787") {
+        Ok(s) => s,
         Err(e) => {
             eprintln!("[companion] bridge server bind failed: {e}");
             return;
@@ -71,215 +213,257 @@ pub fn spawn_bridge_server(state: BridgeState) {
     let bubbles_visible = state.bubbles_visible;
     let sidecar_healthy = state.sidecar_healthy;
 
-    thread::spawn(move || {
-        for conn in listener.incoming() {
-            let mut stream = match conn {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
-
-            let mut reader = BufReader::new(stream.try_clone().unwrap());
-
-            let mut request_line = String::new();
-            if reader.read_line(&mut request_line).is_err() {
-                continue;
-            }
-
-            let parts: Vec<&str> = request_line.split_whitespace().collect();
-            if parts.len() < 2 {
-                continue;
-            }
-            let method = parts[0];
-            let path = parts.get(1).copied().unwrap_or("/");
-
-            // ── GET /health ──────────────────────────────────────────
-            if method == "GET" && (path == "/health" || path == "/health/") {
-                let response = cors_response(200, "{\"ok\":true,\"service\":\"hermes-webui-companion\"}");
-                let _ = stream.write_all(response.as_bytes());
-                continue;
-            }
-
-            // ── GET /api/state ─────────────────────────────────────
-            if method == "GET" && (path == "/api/state" || path == "/api/state/") {
-                let body = if let Ok(guard) = snapshot.lock() {
-                    let healthy = sidecar_healthy.load(Ordering::SeqCst);
-                    let resp = StateResponse::from_snapshot(&guard, healthy);
-                    serde_json::to_string(&resp).unwrap_or_else(|_| "{}".into())
-                } else {
-                    "{\"state\":\"Idle\",\"attention\":[],\"resolved_animation\":\"idle\"}".to_string()
-                };
-                let response = cors_response(200, &body);
-                let _ = stream.write_all(response.as_bytes());
-                continue;
-            }
-
-            // ── GET /api/bubbles/visible ─────────────────────────────
-            // Pet window polls this to sync toggle button state.
-            if method == "GET" && path == "/api/bubbles/visible" {
-                let v = bubbles_visible.load(Ordering::SeqCst);
-                let body = format!("{{\"visible\":{v}}}");
-                let response = cors_response(200, &body);
-                let _ = stream.write_all(response.as_bytes());
-                continue;
-            }
-
-            // ── GET /api/pet/navigation ─────────────────────────────
-            // Adapter polls this to pick up pending navigation commands.
-            // Returns { command: { id, session_id, url, ... } } or { command: null }.
-            if method == "GET" && path.starts_with("/api/pet/navigation") {
-                let body = if let Ok(guard) = navigation.lock() {
-                    if let Some(ref cmd) = *guard {
-                        debug!("[companion] nav poll: returning command id={}", cmd.get("id").and_then(|v| v.as_str()).unwrap_or("?"));
-                        let json = serde_json::json!({ "command": cmd });
-                        serde_json::to_string(&json).unwrap_or_else(|_| "{\"command\":null}".into())
-                    } else {
-                        "{\"command\":null}".to_string()
-                    }
-                } else {
-                    "{\"command\":null}".to_string()
-                };
-                let response = cors_response(200, &body);
-                let _ = stream.write_all(response.as_bytes());
-                continue;
-            }
-
-            // ── POST /api/pet/navigation_ack ─────────────────────────
-            // Adapter acks after applying a navigation command.
-            if method == "POST" && path == "/api/pet/navigation_ack" {
-                if let Ok(mut guard) = navigation.lock() {
-                    *guard = None;
-                }
-                let response = cors_response(200, "{\"ok\":true}");
-                let _ = stream.write_all(response.as_bytes());
-                continue;
-            }
-
-            // ── Read headers (shared by POST handlers) ────────────
-            let mut content_length = 0usize;
-            loop {
-                let mut line = String::new();
-                if reader.read_line(&mut line).is_err() {
-                    break;
-                }
-                if line == "\r\n" || line == "\n" {
-                    break;
-                }
-                if let Some(val) = line
-                    .to_lowercase()
-                    .strip_prefix("content-length:")
-                    .map(|s| s.trim().parse().unwrap_or(0))
-                {
-                    content_length = val;
-                }
-            }
-
-            if content_length == 0 {
-                // ── OPTIONS preflight ─────────────────────
-                if method == "OPTIONS" {
-                    let response = cors_response(204, "");
-                    let _ = stream.write_all(response.as_bytes());
-                }
-                continue;
-            }
-
-            // ── POST /api/webui/snapshot ────────────────────────────
-            if method == "POST" && path == "/api/webui/snapshot" {
-                let mut body = vec![0u8; content_length];
-                if reader.read_exact(&mut body).is_ok() {
-                    if let Ok(raw) = serde_json::from_slice(&body) {
-                        let snap = parse_snapshot(&raw);
-                        debug!("[companion] state={:?} attention={}", snap.state, snap.attention.len());
-                        if let Ok(mut guard) = snapshot.lock() {
-                            *guard = snap;
-                        }
-                    } else {
-                        let body_str = String::from_utf8_lossy(&body);
-                        debug!("[companion] failed to parse POST body: {}", &body_str[..body_str.len().min(200)]);
-                    }
-                }
-                let response = cors_response(200, "{\"ok\":true}");
-                let _ = stream.write_all(response.as_bytes());
-                continue;
-            }
-
-            // ── POST /api/bubbles/visible ─────────────────────────────
-            // Pet window toggle button sets bubble visibility via HTTP.
-            if method == "POST" && path == "/api/bubbles/visible" {
-                let mut body = vec![0u8; content_length];
-                if reader.read_exact(&mut body).is_ok() {
-                    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body) {
-                        if let Some(v) = json.get("visible").and_then(|v| v.as_bool()) {
-                            bubbles_visible.store(v, Ordering::SeqCst);
-                            debug!("[companion] bubbles visible = {v}");
-                        }
-                    }
-                }
-                let response = cors_response(200, "{\"ok\":true}");
-                let _ = stream.write_all(response.as_bytes());
-                continue;
-            }
-
-            // ── POST /api/open-webui (legacy) ────────────────────────
-            if method == "POST" && path == "/api/open-webui" {
-                let mut body = vec![0u8; content_length];
-                if reader.read_exact(&mut body).is_ok() {
-                    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body) {
-                        let sid = json.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
-                        // Queue navigation command for adapter (navigates inside the tab)
-                        if !sid.is_empty() {
-                            let cmd = serde_json::json!({
-                                "id": format!("nav-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()),
-                                "session_id": sid,
-                                "url": format!("/session/{}", sid),
-                            });
-                            if let Ok(mut guard) = navigation.lock() {
-                                *guard = Some(cmd);
-                            }
-                        }
-                        // After adapter navigates, focus existing browser window
-                        #[cfg(target_os = "windows")]
-                        {
-                            let focus_url = if sid.is_empty() {
-                                "http://localhost:8787".to_string()
-                            } else {
-                                format!("http://localhost:8787/session/{}", sid)
-                            };
-                            std::thread::spawn(move || {
-                                std::thread::sleep(std::time::Duration::from_secs(2));
-                                // Three-stage browser focus:
-                                //  1) Title match → WebUI tab is active, just focus it
-                                //  2) Browser found → focus existing window
-                                //     (companion-adapter.js handles session switch in-tab)
-                                //  3) No browser → open default browser
-                                let ps = format!(
-                                    "$w=(New-Object -ComObject WScript.Shell); \
-                                     $found=$w.AppActivate('localhost:8787'); \
-                                     if(-not $found){{$found=$w.AppActivate('WebUI')}}; \
-                                     if(-not $found){{ \
-                                       $browsers=@('zen','msedge','chrome','firefox','brave','opera','vivaldi','chromium','arc'); \
-                                       foreach($b in $browsers){{ \
-                                         $p=Get-Process -Name $b -ErrorAction SilentlyContinue|Where-Object{{$_.MainWindowHandle -ne 0}}|Select-Object -First 1; \
-                                         if($p){{$w.AppActivate($p.Id)|Out-Null;$found=$true;break}} \
-                                       }} \
-                                     }}; \
-                                     if(-not $found){{Start-Process '{url}'}}",
-                                    url = focus_url
-                                );
-                                let _ = std::process::Command::new("powershell")
-                                    .args(["-NoProfile", "-Command", &ps])
-                                    .spawn();
-                            });
-                        }
-                    }
-                }
-                let response = cors_response(200, "{\"ok\":true}");
-                let _ = stream.write_all(response.as_bytes());
-                continue;
-            }
-
-            // ── Unknown ────────────────────────────────────────────
-            let response = cors_response(404, "{\"error\":\"not_found\"}");
-            let _ = stream.write_all(response.as_bytes());
+    std::thread::spawn(move || {
+        debug!("[companion] bridge server listening on 127.0.0.1:17787");
+        for mut request in server.incoming_requests() {
+            let response = route_request(&mut request, &snapshot, &navigation, &bubbles_visible, &sidecar_healthy);
+            let _ = request.respond(response);
         }
     });
+}
+
+#[cfg(feature = "gui")]
+fn route_request(
+    req: &mut tiny_http::Request,
+    snapshot: &Mutex<CompanionSnapshot>,
+    navigation: &Mutex<Option<NavigationCommand>>,
+    bubbles_visible: &AtomicBool,
+    sidecar_healthy: &AtomicBool,
+) -> tiny_http::Response<std::io::Cursor<Vec<u8>>> {
+    use tiny_http::{Header, Method, Response, StatusCode};
+    let method = req.method();
+    let url = req.url().to_string();
+
+    debug!("[companion] {} {}", method, url);
+
+    let handler_result = match (method, url.as_str()) {
+        (Method::Get, "/health") | (Method::Get, "/health/") => handle_health(),
+
+        (Method::Get, "/api/state") | (Method::Get, "/api/state/") => {
+            handle_get_state(snapshot, sidecar_healthy)
+        }
+
+        (Method::Get, "/api/bubbles/visible") => handle_get_bubbles_visible(bubbles_visible),
+
+        (Method::Get, url) if url.starts_with("/api/pet/navigation") => {
+            handle_get_navigation(navigation)
+        }
+
+        (Method::Post, "/api/pet/navigation_ack") => handle_post_navigation_ack(navigation),
+
+        (Method::Post, "/api/webui/snapshot") => {
+            let mut body = Vec::new();
+            let _ = req.as_reader().read_to_end(&mut body);
+            handle_post_snapshot(&body, snapshot)
+        }
+
+        (Method::Post, "/api/bubbles/visible") => {
+            let mut body = Vec::new();
+            let _ = req.as_reader().read_to_end(&mut body);
+            handle_post_bubbles_visible(&body, bubbles_visible)
+        }
+
+        (Method::Post, "/api/open-webui") => {
+            let mut body = Vec::new();
+            let _ = req.as_reader().read_to_end(&mut body);
+            handle_post_open_webui(&body, navigation)
+        }
+
+        // CORS preflight — respond with allow-all headers
+        (Method::Options, _) => HttpResponse::new(204, String::new()),
+
+        _ => HttpResponse::not_found(),
+    };
+
+    let status = StatusCode(handler_result.status);
+    let body = handler_result.body;
+    Response::from_string(body)
+        .with_status_code(status)
+        .with_header(
+            Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
+        )
+        .with_header(
+            Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap(),
+        )
+        .with_header(
+            Header::from_bytes(&b"Access-Control-Allow-Methods"[..], &b"GET, POST, OPTIONS"[..])
+                .unwrap(),
+        )
+        .with_header(
+            Header::from_bytes(
+                &b"Access-Control-Allow-Headers"[..],
+                &b"Content-Type"[..],
+            )
+            .unwrap(),
+        )
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::animation::{AttentionStatus, CompanionState};
+
+    fn test_snapshot() -> Arc<Mutex<CompanionSnapshot>> {
+        Arc::new(Mutex::new(CompanionSnapshot {
+            state: CompanionState::Idle,
+            attention: vec![],
+        }))
+    }
+
+    fn test_navigation() -> Arc<Mutex<Option<NavigationCommand>>> {
+        Arc::new(Mutex::new(None))
+    }
+
+    fn test_flag(initial: bool) -> Arc<AtomicBool> {
+        Arc::new(AtomicBool::new(initial))
+    }
+
+    #[test]
+    fn health_returns_ok() {
+        let resp = handle_health();
+        assert_eq!(resp.status, 200);
+        let json: serde_json::Value = serde_json::from_str(&resp.body).unwrap();
+        assert_eq!(json["ok"], true);
+        assert_eq!(json["service"], "hermes-webui-companion");
+    }
+
+    #[test]
+    fn get_state_returns_idle_when_empty() {
+        let snap = test_snapshot();
+        let healthy = test_flag(true);
+        let resp = handle_get_state(&snap, &healthy);
+        assert_eq!(resp.status, 200);
+        let json: serde_json::Value = serde_json::from_str(&resp.body).unwrap();
+        assert_eq!(json["state"], "idle");
+        assert!(json["resolved_animation"].as_str().is_some());
+    }
+
+    #[test]
+    fn get_state_unhealthy_sidecar_resolves_to_failed() {
+        let snap = test_snapshot();
+        {
+            let mut g = snap.lock().unwrap();
+            g.state = CompanionState::Running;
+        }
+        let healthy = test_flag(false);
+        let resp = handle_get_state(&snap, &healthy);
+        assert_eq!(resp.status, 200);
+        let json: serde_json::Value = serde_json::from_str(&resp.body).unwrap();
+        assert_eq!(json["resolved_animation"], "failed");
+    }
+
+    #[test]
+    fn get_bubbles_visible_returns_flag() {
+        let flag = test_flag(true);
+        let resp = handle_get_bubbles_visible(&flag);
+        assert_eq!(resp.status, 200);
+        let json: serde_json::Value = serde_json::from_str(&resp.body).unwrap();
+        assert_eq!(json["visible"], true);
+    }
+
+    #[test]
+    fn get_navigation_returns_null_when_empty() {
+        let nav = test_navigation();
+        let resp = handle_get_navigation(&nav);
+        assert_eq!(resp.status, 200);
+        let json: serde_json::Value = serde_json::from_str(&resp.body).unwrap();
+        assert_eq!(json["command"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn get_navigation_returns_pending_command() {
+        let nav = test_navigation();
+        {
+            let mut g = nav.lock().unwrap();
+            *g = Some(serde_json::json!({"session_id": "abc123"}));
+        }
+        let resp = handle_get_navigation(&nav);
+        assert_eq!(resp.status, 200);
+        let json: serde_json::Value = serde_json::from_str(&resp.body).unwrap();
+        assert_eq!(json["command"]["session_id"], "abc123");
+    }
+
+    #[test]
+    fn post_navigation_ack_clears_command() {
+        let nav = test_navigation();
+        {
+            let mut g = nav.lock().unwrap();
+            *g = Some(serde_json::json!({"session_id": "abc"}));
+        }
+        let resp = handle_post_navigation_ack(&nav);
+        assert_eq!(resp.status, 200);
+        // After ack, command should be cleared
+        assert!(nav.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn post_snapshot_updates_state() {
+        let snap = test_snapshot();
+        let body = br#"{"companion":{"state":"running","attention":[]}}"#;
+        let resp = handle_post_snapshot(body, &snap);
+        assert_eq!(resp.status, 200);
+        let guard = snap.lock().unwrap();
+        assert_eq!(guard.state, CompanionState::Running);
+    }
+
+    #[test]
+    fn post_snapshot_with_approval_attention() {
+        let snap = test_snapshot();
+        let body = br#"{"companion":{"state":"idle","attention":[{"status":"approval","session_id":"sesh1"}]}}"#;
+        let resp = handle_post_snapshot(body, &snap);
+        assert_eq!(resp.status, 200);
+        let guard = snap.lock().unwrap();
+        assert_eq!(guard.attention.len(), 1);
+        assert_eq!(guard.attention[0].status, AttentionStatus::Approval);
+    }
+
+    #[test]
+    fn post_snapshot_handles_invalid_json() {
+        let snap = test_snapshot();
+        let body = b"not json";
+        let resp = handle_post_snapshot(body, &snap);
+        assert_eq!(resp.status, 200);
+        let json: serde_json::Value = serde_json::from_str(&resp.body).unwrap();
+        assert_eq!(json["ok"], false);
+    }
+
+    #[test]
+    fn post_bubbles_visible_sets_flag() {
+        let flag = test_flag(true);
+        let body = br#"{"visible":false}"#;
+        let resp = handle_post_bubbles_visible(body, &flag);
+        assert_eq!(resp.status, 200);
+        assert!(!flag.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn post_bubbles_visible_sets_true() {
+        let flag = test_flag(false);
+        let body = br#"{"visible":true}"#;
+        handle_post_bubbles_visible(body, &flag);
+        assert!(flag.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn post_open_webui_queues_navigation() {
+        let nav = test_navigation();
+        let body = br#"{"session_id":"test-sid"}"#;
+        let resp = handle_post_open_webui(body, &nav);
+        assert_eq!(resp.status, 200);
+        let guard = nav.lock().unwrap();
+        let cmd = guard.as_ref().unwrap();
+        assert_eq!(cmd["session_id"], "test-sid");
+    }
+
+    #[test]
+    fn post_open_webui_empty_session_id_no_nav() {
+        let nav = test_navigation();
+        let body = br#"{"session_id":""}"#;
+        let _ = handle_post_open_webui(body, &nav);
+        assert!(nav.lock().unwrap().is_none());
+    }
 }
