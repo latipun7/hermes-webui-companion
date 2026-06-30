@@ -2,7 +2,7 @@
 
 Tracer-bullet vertical slices for adding a "Switch pet" submenu to the right-click context menu.
 
-**Status:** Ready for implementation
+**Status:** Complete ✅ — [PR #19](https://github.com/latipun7/hermes-webui-companion/pull/19) merged 2026-06-30
 **Date:** 2026-06-30
 
 ---
