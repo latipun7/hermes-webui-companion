@@ -121,11 +121,12 @@ pub fn switch_pet_inner(app: tauri::AppHandle, slug: String) -> Result<(), Strin
     client.select_pet(&slug).map_err(|e| e.error)?;
 
     // 2. Fetch the new spritesheet
-    let _spritesheet = client.fetch_spritesheet(&slug).map_err(|e| e.error)?;
+    client.fetch_spritesheet(&slug).map_err(|e| e.error)?;
 
-    // 3. Restart the app to reload spritesheet with new active pet
+    // 3. Restart the app to reload with the new active pet
     app.restart();
 
+    #[allow(unreachable_code)]
     Ok(())
 }
 
