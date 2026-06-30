@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use companion_renderer::animation::{CompanionSnapshot, StateResponse};
 use companion_renderer::sidecar_client::SidecarClient;
 use tauri;
-use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 
 use crate::debug;
 
@@ -166,12 +166,10 @@ fn build_switch_submenu(
 
     let mut submenu = SubmenuBuilder::new(app, "Switch pet");
     for pet in &pet_list.pets {
-        let label = if pet.slug == pet_list.active {
-            format!("\u{25CF} {}", pet.display_name)  // ● active
-        } else {
-            format!("\u{25CB} {}", pet.display_name)  // ○ inactive
-        };
-        let item = MenuItemBuilder::with_id(format!("switch:{}", pet.slug), label)
+        let id = format!("switch:{}", pet.slug);
+        let is_active = pet.slug == pet_list.active;
+        let item = CheckMenuItemBuilder::with_id(id, &pet.display_name)
+            .checked(is_active)
             .build(app)?;
         submenu = submenu.item(&item);
     }
