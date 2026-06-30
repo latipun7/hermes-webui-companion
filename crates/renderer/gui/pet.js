@@ -24,7 +24,7 @@ let currentState = "idle";
 let currentCol = 0;
 // User manually hid the bubble — suppress animation updates until state changes.
 let userMuted = false;
-let mutedState = null;
+let mutedCompanionState = null;
 // Frame counts per state (most petdex sprites use 6-8 frames)
 const FRAMES_PER_STATE = {
   idle: 6,
@@ -134,8 +134,12 @@ async function pollCompanionState() {
         dragState = dir;
         currentState = dir;
         currentCol = 0;
-        // Revert to companion state after 500ms
-        setTimeout(() => { dragState = null; }, 500);
+        // Drain any additional dx accumulated during the animation,
+        // then revert to companion state on next poll.
+        setTimeout(async () => {
+          await invokeTauri("get_drag_dx").catch(() => {});
+          dragState = null;
+        }, 500);
         return;
       }
     } catch (_) {
@@ -146,10 +150,18 @@ async function pollCompanionState() {
     const resolved = state.resolved_animation || "idle";
 
     if (userMuted) {
-      if (resolved !== mutedState) {
+      // On first poll after mute, capture the companion state
+      if (mutedCompanionState === null) {
+        mutedCompanionState = resolved;
+      }
+      // Stay idle until the companion state actually changes
+      if (resolved !== mutedCompanionState) {
         userMuted = false;
-        mutedState = null;
+        mutedCompanionState = null;
         setAnimationState(resolved);
+      } else {
+        // Ensure pet stays idle — drag animation may have changed currentState
+        setAnimationState("idle");
       }
     } else {
       setAnimationState(resolved);
@@ -223,8 +235,14 @@ function setupBubbleToggle() {
       // the companion state actually changes (not just re-polled).
       if (!bubblesVisible) {
         userMuted = true;
-        mutedState = currentState;
+        // Save companion state at mute time so we know when it changes.
+        // We read it on the next poll and compare against resolved_animation.
+        mutedCompanionState = null; // will be set on next pollCompanionState
         setAnimationState("idle");
+      } else {
+        // Bubble shown again — release mute immediately
+        userMuted = false;
+        mutedCompanionState = null;
       }
     } catch (err) {
       console.error("bubbles visible fetch failed:", err);
