@@ -2,7 +2,7 @@
 
 Tracer-bullet vertical slices for implementing the right-click context menu on the pet window.
 
-**Status:** Ready for implementation  
+**Status:** Complete ✅ — [PR #11](https://github.com/latipun7/hermes-webui-companion/pull/11) merged 2026-06-30  
 **Date:** 2026-06-30
 
 ---
