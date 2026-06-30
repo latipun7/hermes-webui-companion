@@ -9,9 +9,9 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::get,
+    routing::{get, post},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
@@ -63,6 +63,30 @@ struct Health {
 #[derive(Serialize)]
 struct ErrorBody {
     error: String,
+}
+
+#[derive(Serialize)]
+struct PetEntry {
+    slug: String,
+    display_name: String,
+}
+
+#[derive(Serialize)]
+struct PetList {
+    pets: Vec<PetEntry>,
+    active: String,
+}
+
+#[derive(Deserialize)]
+struct SelectPetRequest {
+    slug: String,
+}
+
+#[derive(Serialize)]
+struct SelectPetResponse {
+    ok: bool,
+    slug: String,
+    display_name: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -167,6 +191,132 @@ async fn serve_spritesheet(
     Ok(([(axum::http::header::CONTENT_TYPE, "image/webp")], bytes))
 }
 
+async fn list_pets(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<PetList>, (StatusCode, Json<ErrorBody>)> {
+    let mut pets = Vec::new();
+    let mut entries = tokio::fs::read_dir(state.pets_dir())
+        .await
+        .map_err(|_| {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody {
+                error: "cannot read pets directory".into(),
+            }))
+        })?;
+
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        if !entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
+            continue;
+        }
+
+        let slug = entry.file_name().to_string_lossy().into_owned();
+        let pet_json_path = state.pets_dir().join(&slug).join("pet.json");
+
+        // Read displayName from pet.json; skip dirs without one
+        let pet_json_path = state.pets_dir().join(&slug).join("pet.json");
+        if !pet_json_path.exists() {
+            continue;
+        }
+
+        let display_name = match tokio::fs::read_to_string(&pet_json_path).await {
+            Ok(contents) => {
+                serde_json::from_str::<serde_json::Value>(&contents)
+                    .ok()
+                    .and_then(|v| {
+                        v.get("displayName")
+                            .and_then(|dn| dn.as_str())
+                            .map(String::from)
+                    })
+                    .unwrap_or_else(|| slug.clone())
+            }
+            Err(_) => slug.clone(),
+        };
+
+        pets.push(PetEntry {
+            slug,
+            display_name,
+        });
+    }
+
+    // Read active slug from config
+    let active = get_active_slug(&state).await.unwrap_or_default();
+
+    Ok(Json(PetList { pets, active }))
+}
+
+/// Helper: read the active pet slug from config.yaml.
+async fn get_active_slug(state: &AppState) -> Result<String, (StatusCode, Json<ErrorBody>)> {
+    let config: serde_yaml_ng::Value = serde_yaml_ng::from_str(
+        &tokio::fs::read_to_string(state.config_path())
+            .await
+            .map_err(|_| {
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody {
+                    error: "cannot read config".into(),
+                }))
+            })?,
+    )
+    .map_err(|_| {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody {
+            error: "invalid config".into(),
+        }))
+    })?;
+
+    Ok(config
+        .get("display")
+        .and_then(|d| d.get("pet"))
+        .and_then(|p| p.get("slug"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .unwrap_or_default())
+}
+
+async fn select_pet(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<SelectPetRequest>,
+) -> Result<Json<SelectPetResponse>, (StatusCode, Json<ErrorBody>)> {
+    // Run hermes pets select <slug>
+    let output = std::process::Command::new("hermes")
+        .args(["pets", "select", &req.slug])
+        .output()
+        .map_err(|e| {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody {
+                error: format!("hermes pets select failed: {}", e),
+            }))
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody {
+            error: format!("hermes pets select failed: {}", stderr.trim()),
+        })));
+    }
+
+    // Read display_name from pet.json
+    let pet_json_path = state.pets_dir().join(&req.slug).join("pet.json");
+    let display_name = if pet_json_path.exists() {
+        tokio::fs::read_to_string(&pet_json_path)
+            .await
+            .ok()
+            .and_then(|contents| {
+                serde_json::from_str::<serde_json::Value>(&contents).ok()
+            })
+            .and_then(|v| {
+                v.get("displayName")
+                    .and_then(|dn| dn.as_str())
+                    .map(String::from)
+            })
+            .unwrap_or_else(|| req.slug.clone())
+    } else {
+        req.slug.clone()
+    };
+
+    Ok(Json(SelectPetResponse {
+        ok: true,
+        slug: req.slug,
+        display_name,
+    }))
+}
+
 // ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
@@ -175,6 +325,8 @@ fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/api/pet/active", get(get_active_pet))
+        .route("/api/pets", get(list_pets))
+        .route("/api/pet/select", post(select_pet))
         .route("/pets/{slug}/spritesheet.webp", get(serve_spritesheet))
         .layer(CorsLayer::permissive())
         .with_state(Arc::new(state))
@@ -410,5 +562,173 @@ mod tests {
             .to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error"], "spritesheet not found");
+    }
+
+    #[tokio::test]
+    async fn list_pets_returns_installed_pets() {
+        let (home, state) = setup_state();
+        // Install two pets with pet.json files
+        std::fs::create_dir_all(home.path().join("pets").join("doraemon")).unwrap();
+        std::fs::write(
+            home.path().join("pets").join("doraemon").join("pet.json"),
+            r#"{"id":"doraemon","displayName":"Doraemon"}"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(home.path().join("pets").join("nika")).unwrap();
+        std::fs::write(
+            home.path().join("pets").join("nika").join("pet.json"),
+            r#"{"id":"nika","displayName":"Nika"}"#,
+        )
+        .unwrap();
+        // Set active pet in config
+        std::fs::write(
+            home.path().join("config.yaml"),
+            "display:\n  pet:\n    enabled: true\n    slug: nika\n",
+        )
+        .unwrap();
+
+        let router = build_router(state);
+        let response = router
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/pets")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        let pets = json["pets"].as_array().unwrap();
+        assert_eq!(pets.len(), 2);
+        // Verify display names from pet.json
+        let slugs: Vec<&str> = pets.iter().map(|p| p["slug"].as_str().unwrap()).collect();
+        assert!(slugs.contains(&"doraemon"));
+        assert!(slugs.contains(&"nika"));
+        let doraemon = pets.iter().find(|p| p["slug"] == "doraemon").unwrap();
+        assert_eq!(doraemon["display_name"], "Doraemon");
+        let nika = pets.iter().find(|p| p["slug"] == "nika").unwrap();
+        assert_eq!(nika["display_name"], "Nika");
+        // Active slug should be "nika"
+        assert_eq!(json["active"], "nika");
+    }
+
+    #[tokio::test]
+    async fn list_pets_skips_missing_pet_json() {
+        let (home, state) = setup_state();
+        // One valid pet, one dir without pet.json (should be skipped)
+        std::fs::create_dir_all(home.path().join("pets").join("valid")).unwrap();
+        std::fs::write(
+            home.path().join("pets").join("valid").join("pet.json"),
+            r#"{"id":"valid","displayName":"Valid"}"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(home.path().join("pets").join("no_json")).unwrap();
+        // no pet.json in no_json/
+
+        std::fs::write(
+            home.path().join("config.yaml"),
+            "display:\n  pet:\n    enabled: true\n    slug: valid\n",
+        )
+        .unwrap();
+
+        let router = build_router(state);
+        let response = router
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/pets")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        let pets = json["pets"].as_array().unwrap();
+        // Only valid pet, no_json dir should be skipped
+        assert_eq!(pets.len(), 1);
+        assert_eq!(pets[0]["slug"], "valid");
+        assert_eq!(pets[0]["display_name"], "Valid");
+        assert_eq!(json["active"], "valid");
+    }
+
+    #[tokio::test]
+    async fn select_pet_success() {
+        let (home, state) = setup_state();
+        // Create pet with pet.json
+        std::fs::create_dir_all(home.path().join("pets").join("nika")).unwrap();
+        std::fs::write(
+            home.path().join("pets").join("nika").join("pet.json"),
+            r#"{"id":"nika","displayName":"Nika"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            home.path().join("config.yaml"),
+            "display:\n  pet:\n    enabled: true\n    slug: doraemon\n",
+        )
+        .unwrap();
+
+        // Create a fake hermes script that exits 0
+        let fake_bin = home.path().join("fake-bin");
+        std::fs::create_dir_all(&fake_bin).unwrap();
+        let hermes_script = if cfg!(windows) {
+            format!("@echo off\r\nexit /b 0\r\n")
+        } else {
+            format!("#!/bin/sh\nexit 0\n")
+        };
+        let script_path = fake_bin.join(if cfg!(windows) { "hermes.bat" } else { "hermes" });
+        std::fs::write(&script_path, &hermes_script).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))
+                .unwrap();
+        }
+        // Prepend fake-bin to PATH
+        let old_path = std::env::var("PATH").unwrap_or_default();
+        unsafe {
+            std::env::set_var(
+                "PATH",
+                format!("{}:{}", fake_bin.display(), old_path),
+            );
+        }
+
+        let router = build_router(state);
+        let response = router
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/api/pet/select")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"slug":"nika"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = BodyExt::collect(response.into_body())
+            .await
+            .unwrap()
+            .to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["ok"], true);
+        assert_eq!(json["slug"], "nika");
+        assert_eq!(json["display_name"], "Nika");
+
+        // Restore PATH
+        unsafe { std::env::set_var("PATH", old_path); }
     }
 }

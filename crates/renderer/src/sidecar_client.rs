@@ -23,6 +23,28 @@ pub struct SidecarError {
     pub error: String,
 }
 
+/// A single pet entry from GET /api/pets.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct PetEntry {
+    pub slug: String,
+    pub display_name: String,
+}
+
+/// Response from GET /api/pets.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct PetListResponse {
+    pub pets: Vec<PetEntry>,
+    pub active: String,
+}
+
+/// Response from POST /api/pet/select.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct SelectPetResponse {
+    pub ok: bool,
+    pub slug: String,
+    pub display_name: String,
+}
+
 // ---------------------------------------------------------------------------
 // Client
 // ---------------------------------------------------------------------------
@@ -102,8 +124,8 @@ impl SidecarClient {
     /// with HTTP 200 and `{"ok": true}`. Returns `false` on network errors,
     /// non-200 status, malformed JSON, or missing/mismatched `ok` field.
     ///
-    /// This is preferred over a raw TCP connect because it verifies the
-    /// application layer is functional, not just the port is open.
+    /// Check whether the sidecar is healthy (application-level).
+    /// ...
     pub fn check_health(&self) -> bool {
         let url = format!("{}/health", self.base_url);
         match ureq::get(&url)
@@ -112,15 +134,73 @@ impl SidecarClient {
             .build()
             .call()
         {
-            Ok(response) if response.status() == 200 => {
-                response
-                    .into_body()
-                    .read_json::<serde_json::Value>()
-                    .ok()
-                    .and_then(|v| v.get("ok").and_then(|ok| ok.as_bool()))
-                    .unwrap_or(false)
-            }
+            Ok(response) if response.status() == 200 => response
+                .into_body()
+                .read_json::<serde_json::Value>()
+                .ok()
+                .and_then(|v| v.get("ok").and_then(|ok| ok.as_bool()))
+                .unwrap_or(false),
             _ => false,
+        }
+    }
+
+    /// Fetch the list of all installed pets with display names.
+    pub fn fetch_pets(&self) -> Result<PetListResponse, SidecarError> {
+        let url = format!("{}/api/pets", self.base_url);
+        let response = ureq::get(&url)
+            .config()
+            .http_status_as_error(false)
+            .build()
+            .call()
+            .map_err(|e| SidecarError {
+                error: format!("http error: {}", e),
+            })?;
+
+        let status = response.status();
+        if status == 200 {
+            response.into_body().read_json::<PetListResponse>().map_err(|e| {
+                SidecarError {
+                    error: format!("parse error: {}", e),
+                }
+            })
+        } else {
+            Err(response
+                .into_body()
+                .read_json::<SidecarError>()
+                .unwrap_or(SidecarError {
+                    error: format!("unexpected status: {}", status),
+                }))
+        }
+    }
+
+    /// Select a new active pet via hermes pets select.
+    pub fn select_pet(&self, slug: &str) -> Result<SelectPetResponse, SidecarError> {
+        let url = format!("{}/api/pet/select", self.base_url);
+        let body = serde_json::json!({"slug": slug});
+        let response = ureq::post(&url)
+            .config()
+            .http_status_as_error(false)
+            .build()
+            .send_json(&body)
+            .map_err(|e| SidecarError {
+                error: format!("http error: {}", e),
+            })?;
+
+        let status = response.status();
+        if status == 200 {
+            response
+                .into_body()
+                .read_json::<SelectPetResponse>()
+                .map_err(|e| SidecarError {
+                    error: format!("parse error: {}", e),
+                })
+        } else {
+            Err(response
+                .into_body()
+                .read_json::<SidecarError>()
+                .unwrap_or(SidecarError {
+                    error: format!("unexpected status: {}", status),
+                }))
         }
     }
 }
@@ -238,5 +318,32 @@ mod tests {
         let port = serve_once(200, r#"{"service":"test"}"#);
         let client = SidecarClient::new(format!("http://127.0.0.1:{}", port));
         assert!(!client.check_health());
+    }
+
+    #[test]
+    fn fetch_pets_success() {
+        let port = serve_once(
+            200,
+            r#"{"pets":[{"slug":"doraemon","display_name":"Doraemon"},{"slug":"nika","display_name":"Nika"}],"active":"nika"}"#,
+        );
+        let client = SidecarClient::new(format!("http://127.0.0.1:{}", port));
+        let result = client.fetch_pets().unwrap();
+        assert_eq!(result.pets.len(), 2);
+        assert_eq!(result.pets[0].slug, "doraemon");
+        assert_eq!(result.pets[0].display_name, "Doraemon");
+        assert_eq!(result.active, "nika");
+    }
+
+    #[test]
+    fn select_pet_success() {
+        let port = serve_once(
+            200,
+            r#"{"ok":true,"slug":"nika","display_name":"Nika"}"#,
+        );
+        let client = SidecarClient::new(format!("http://127.0.0.1:{}", port));
+        let result = client.select_pet("nika").unwrap();
+        assert!(result.ok);
+        assert_eq!(result.slug, "nika");
+        assert_eq!(result.display_name, "Nika");
     }
 }
