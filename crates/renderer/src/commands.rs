@@ -167,9 +167,9 @@ fn build_switch_submenu(
     let mut submenu = SubmenuBuilder::new(app, "Switch pet");
     for pet in &pet_list.pets {
         let label = if pet.slug == pet_list.active {
-            format!("✓ {}", pet.display_name)
+            format!("\u{25CF} {}", pet.display_name)  // ● active
         } else {
-            format!("  {}", pet.display_name)
+            format!("\u{25CB} {}", pet.display_name)  // ○ inactive
         };
         let item = MenuItemBuilder::with_id(format!("switch:{}", pet.slug), label)
             .build(app)?;
