@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use companion_renderer::animation::{CompanionSnapshot, StateResponse};
 use companion_renderer::sidecar_client::SidecarClient;
 use tauri;
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 
 use crate::debug;
 
@@ -112,17 +112,72 @@ pub fn restart_pet(app: tauri::AppHandle) {
     app.restart();
 }
 
-/// Build the native context menu with Restart pet and Close pet items.
+/// Switch to a new pet — called from on_menu_event when user clicks a pet in the submenu.
+/// This is NOT a #[tauri::command] (called internally from gui.rs menu handler).
+pub fn switch_pet_inner(app: tauri::AppHandle, slug: String) -> Result<(), String> {
+    let client = SidecarClient::new("http://127.0.0.1:17888".into());
+
+    // 1. Select the new pet via sidecar (runs hermes pets select)
+    client.select_pet(&slug).map_err(|e| e.error)?;
+
+    // 2. Fetch the new spritesheet
+    let _spritesheet = client.fetch_spritesheet(&slug).map_err(|e| e.error)?;
+
+    // 3. Restart the app to reload spritesheet with new active pet
+    app.restart();
+
+    Ok(())
+}
+
+/// Build the native context menu with Switch pet submenu, Restart pet, and Close pet.
 fn build_context_menu(
     app: &tauri::AppHandle,
 ) -> Result<tauri::menu::Menu<tauri::Wry>, tauri::Error> {
     let restart = MenuItemBuilder::with_id("restart", "Restart pet").build(app)?;
     let close = MenuItemBuilder::with_id("close", "Close pet").build(app)?;
-    MenuBuilder::new(app)
-        .item(&restart)
+
+    // Build Switch pet submenu from sidecar
+    let switch_submenu = build_switch_submenu(app);
+
+    let mut menu_builder = MenuBuilder::new(app);
+    if let Ok(submenu) = switch_submenu {
+        menu_builder = menu_builder.item(&submenu);
+    } else {
+        // Sidecar unreachable — show disabled placeholder
+        let disabled = MenuItemBuilder::with_id("switch_unavailable", "Switch pet (unavailable)")
+            .enabled(false)
+            .build(app)?;
+        menu_builder = menu_builder.item(&disabled);
+    }
+    menu_builder
         .separator()
+        .item(&restart)
         .item(&close)
         .build()
+}
+
+/// Build the Switch pet submenu by fetching installed pets from the sidecar.
+fn build_switch_submenu(
+    app: &tauri::AppHandle,
+) -> Result<tauri::menu::Submenu<tauri::Wry>, tauri::Error> {
+    let client = SidecarClient::new("http://127.0.0.1:17888".into());
+    let pet_list = client
+        .fetch_pets()
+        .map_err(|_| tauri::Error::from(std::io::Error::new(std::io::ErrorKind::Other, "sidecar unreachable")))?;
+
+    let mut submenu = SubmenuBuilder::new(app, "Switch pet");
+    for pet in &pet_list.pets {
+        let label = if pet.slug == pet_list.active {
+            format!("✓ {}", pet.display_name)
+        } else {
+            format!("  {}", pet.display_name)
+        };
+        let item = MenuItemBuilder::with_id(format!("switch:{}", pet.slug), label)
+            .build(app)?;
+        submenu = submenu.item(&item);
+    }
+
+    submenu.build()
 }
 
 /// Show the native context menu as a popup at the cursor position.

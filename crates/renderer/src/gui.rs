@@ -57,6 +57,13 @@ fn main() {
             match event.id().as_ref() {
                 "restart" => app.restart(),
                 "close" => app.exit(0),
+                id if id.starts_with("switch:") => {
+                    let slug = id.strip_prefix("switch:").unwrap_or("");
+                    // switch_pet handles the spritesheet reload via sidecar
+                    if let Err(e) = commands::switch_pet_inner(app.clone(), slug.to_string()) {
+                        eprintln!("[companion] switch pet failed: {}", e);
+                    }
+                }
                 _ => {}
             }
         })
