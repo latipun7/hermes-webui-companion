@@ -14,13 +14,19 @@
 //! - POST /api/bubbles/visible → set bubble visibility
 //! - POST /api/open-webui      → open/focus WebUI session
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
+#[cfg(feature = "gui")]
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
-use crate::animation::{CompanionSnapshot, StateResponse};
+use crate::animation::CompanionSnapshot;
+#[cfg(feature = "gui")]
+use crate::animation::StateResponse;
+#[cfg(feature = "gui")]
 use crate::bridge::parse_snapshot;
 
 /// Log only when HERMES_COMPANION_DEBUG=1.
+#[cfg(feature = "gui")]
 macro_rules! debug {
     ($($arg:tt)*) => {
         if std::env::var("HERMES_COMPANION_DEBUG").unwrap_or_default() == "1" {
@@ -79,6 +85,7 @@ fn handle_health() -> HttpResponse {
     HttpResponse::ok(r#"{"ok":true,"service":"hermes-webui-companion"}"#.into())
 }
 
+#[cfg(feature = "gui")]
 fn handle_get_state(snapshot: &Mutex<CompanionSnapshot>, sidecar_healthy: &AtomicBool) -> HttpResponse {
     let body = if let Ok(guard) = snapshot.lock() {
         let healthy = sidecar_healthy.load(Ordering::SeqCst);
@@ -90,11 +97,13 @@ fn handle_get_state(snapshot: &Mutex<CompanionSnapshot>, sidecar_healthy: &Atomi
     HttpResponse::ok(body)
 }
 
+#[cfg(feature = "gui")]
 fn handle_get_bubbles_visible(flag: &AtomicBool) -> HttpResponse {
     let v = flag.load(Ordering::SeqCst);
     HttpResponse::ok(format!(r#"{{"visible":{v}}}"#))
 }
 
+#[cfg(feature = "gui")]
 fn handle_get_navigation(nav: &Mutex<Option<NavigationCommand>>) -> HttpResponse {
     let body = if let Ok(guard) = nav.lock() {
         if let Some(ref cmd) = *guard {
@@ -109,6 +118,7 @@ fn handle_get_navigation(nav: &Mutex<Option<NavigationCommand>>) -> HttpResponse
     HttpResponse::ok(body)
 }
 
+#[cfg(feature = "gui")]
 fn handle_post_navigation_ack(nav: &Mutex<Option<NavigationCommand>>) -> HttpResponse {
     if let Ok(mut guard) = nav.lock() {
         *guard = None;
@@ -116,6 +126,7 @@ fn handle_post_navigation_ack(nav: &Mutex<Option<NavigationCommand>>) -> HttpRes
     HttpResponse::ok(r#"{"ok":true}"#.into())
 }
 
+#[cfg(feature = "gui")]
 fn handle_post_snapshot(body: &[u8], snapshot: &Mutex<CompanionSnapshot>) -> HttpResponse {
     match serde_json::from_slice(body) {
         Ok(raw) => {
@@ -133,6 +144,7 @@ fn handle_post_snapshot(body: &[u8], snapshot: &Mutex<CompanionSnapshot>) -> Htt
     }
 }
 
+#[cfg(feature = "gui")]
 fn handle_post_bubbles_visible(body: &[u8], flag: &AtomicBool) -> HttpResponse {
     if let Ok(json) = serde_json::from_slice::<serde_json::Value>(body) {
         if let Some(v) = json.get("visible").and_then(|v| v.as_bool()) {
@@ -142,6 +154,7 @@ fn handle_post_bubbles_visible(body: &[u8], flag: &AtomicBool) -> HttpResponse {
     HttpResponse::ok(r#"{"ok":true}"#.into())
 }
 
+#[cfg(feature = "gui")]
 fn handle_post_open_webui(body: &[u8], nav: &Mutex<Option<NavigationCommand>>) -> HttpResponse {
     if let Ok(json) = serde_json::from_slice::<serde_json::Value>(body) {
         let sid = json
@@ -302,7 +315,7 @@ fn route_request(
 // Tests
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
+#[cfg(all(test, feature = "gui"))]
 mod tests {
     use super::*;
     use crate::animation::{AttentionStatus, CompanionState};

@@ -209,7 +209,6 @@ async fn list_pets(
         }
 
         let slug = entry.file_name().to_string_lossy().into_owned();
-        let pet_json_path = state.pets_dir().join(&slug).join("pet.json");
 
         // Read displayName from pet.json; skip dirs without one
         let pet_json_path = state.pets_dir().join(&slug).join("pet.json");
