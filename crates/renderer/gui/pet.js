@@ -115,28 +115,6 @@ function setAnimationState(state) {
 // ---------------------------------------------------------------------------
 
 let dragState = null;    // "running-right" | "running-left" | null
-let dragPrevX = null;
-
-function setupDragAnimation() {
-  document.addEventListener("mousedown", (e) => {
-    dragPrevX = e.clientX;
-  });
-  document.addEventListener("mousemove", (e) => {
-    if (dragPrevX === null) return;
-    const dx = e.clientX - dragPrevX;
-    if (Math.abs(dx) > 2) {
-      dragState = dx > 0 ? "running-right" : "running-left";
-      currentState = dragState;
-      currentCol = 0;
-    }
-    dragPrevX = e.clientX;
-  });
-  document.addEventListener("mouseup", () => {
-    dragPrevX = null;
-    dragState = null;
-    // Restore companion state on next poll
-  });
-}
 
 // ---------------------------------------------------------------------------
 // State polling
@@ -147,11 +125,27 @@ async function pollCompanionState() {
   if (dragState) return;
 
   try {
+    // Check for accumulated drag delta from Rust (OS drag pauses JS,
+    // so we detect direction post-drag via Moved events on Rust side).
+    try {
+      const dx = await invokeTauri("get_drag_dx");
+      if (Math.abs(dx) > 10) {
+        const dir = dx > 0 ? "running-right" : "running-left";
+        dragState = dir;
+        currentState = dir;
+        currentCol = 0;
+        // Revert to companion state after 500ms
+        setTimeout(() => { dragState = null; }, 500);
+        return;
+      }
+    } catch (_) {
+      // IPC error — ignore, proceed with companion state
+    }
+
     const state = await invokeTauri("get_companion_state");
     const resolved = state.resolved_animation || "idle";
 
     if (userMuted) {
-      // Stay idle until the companion state actually changes
       if (resolved !== mutedState) {
         userMuted = false;
         mutedState = null;
@@ -286,7 +280,6 @@ let retryTimer = null;
 async function main() {
   spriteDiv = document.getElementById(SPRITE_ID);
   setupDrag();
-  setupDragAnimation();
   setupBubbleToggle();
 
   // Poll bridge to keep button in sync with auto-hide

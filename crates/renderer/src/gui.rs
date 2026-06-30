@@ -11,7 +11,7 @@ mod commands;
 mod debug;
 mod health;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use companion_renderer::animation::{CompanionSnapshot, CompanionState};
@@ -32,18 +32,22 @@ fn main() {
         Arc::new(Mutex::new(None));
     let bubbles_visible = Arc::new(AtomicBool::new(true));
     let sidecar_healthy = spawn_health_check();
+    let drag_dx = Arc::new(AtomicI32::new(0));
+    let last_pos: Arc<Mutex<(i32, i32)>> = Arc::new(Mutex::new((0, 0)));
 
     // ── Tauri builder ─────────────────────────────────────────
     tauri::Builder::default()
         .manage(companion_state.clone())
         .manage(sidecar_healthy.clone())
+        .manage(drag_dx.clone())
         .invoke_handler(tauri::generate_handler![
             commands::get_active_pet,
             commands::get_spritesheet,
             commands::start_dragging,
             commands::open_webui,
             commands::get_companion_state,
-            commands::set_bubbles_visible
+            commands::set_bubbles_visible,
+            commands::get_drag_dx
         ])
         .setup(move |app| {
             // Bridge server — receives WebUI snapshots
@@ -70,6 +74,8 @@ fn main() {
             // ── Window events ───────────────────────────────────
             let resizing = AtomicBool::new(false);
             let win2 = window.clone();
+            let drag_dx2 = drag_dx.clone();
+            let last_pos2 = last_pos.clone();
 
             window.on_window_event(move |event| {
                 use tauri::WindowEvent;
@@ -87,7 +93,14 @@ fn main() {
                         reposition_bubble(&win2, &bubbles);
                         resizing.store(false, Ordering::SeqCst);
                     }
-                    WindowEvent::Moved(_pos) => {
+                    WindowEvent::Moved(pos) => {
+                        if let Ok(mut lp) = last_pos2.lock() {
+                            let dx = pos.x - lp.0;
+                            if dx != 0 {
+                                drag_dx2.fetch_add(dx, Ordering::SeqCst);
+                            }
+                            *lp = (pos.x, pos.y);
+                        }
                         reposition_bubble(&win2, &bubbles);
                     }
                     _ => {}

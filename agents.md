@@ -127,6 +127,20 @@ cargo test --workspace
 | `ready`                | waving    | Session completed        |
 | sidecar down           | failed    | Health check unreachable |
 
+## Drag Animation
+
+During OS-level window drag, the WebView JS thread is paused — animations cannot update in real-time.
+Instead, `WindowEvent::Moved` in Rust accumulates the horizontal delta in an `AtomicI32`.
+`pollCompanionState()` reads this on each 1s tick and triggers a 500ms running-right/left animation
+as post-drag feedback. During the animation, companion state polling is suppressed to prevent flicker.
+
+## Bubble Mute
+
+Clicking the bubble toggle button hides the bubble and sets `userMuted = true`. The pet animation
+switches to idle and stays idle until the companion state **actually changes** (not just re-polled
+with the same value). This prevents the animation from flickering back to the companion state
+immediately after hiding the bubble.
+
 ## Debug Logging
 
 Set `HERMES_COMPANION_DEBUG=1` for verbose logs with scoped prefixes:
@@ -145,3 +159,5 @@ Set `HERMES_COMPANION_DEBUG=1` for verbose logs with scoped prefixes:
 - **Sidecar**: axum, tokio, serde_yaml_ng
 - **Renderer**: ureq (with json feature), image, tiny_http, serde
 - **Frontend**: vanilla HTML/CSS/JS (no npm)
+- **Windows**: `#![windows_subsystem = "windows"]` suppresses console window on release builds
+- **Cross-platform**: `open_webui` uses `cmd /c start` (Windows), `open` (macOS), or `xdg-open` (Linux)

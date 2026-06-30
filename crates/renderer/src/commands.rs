@@ -3,7 +3,7 @@
 //! Each function is a `#[tauri::command]` invoked from the frontend
 //! via `invokeTauri()` over Tauri IPC.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use companion_renderer::animation::{CompanionSnapshot, StateResponse};
@@ -88,4 +88,13 @@ pub fn set_bubbles_visible(
     } else {
         bubbles.hide().map_err(|e| e.to_string())
     }
+}
+
+/// Return and reset the drag delta X since last call.
+/// Positive = dragging right, negative = dragging left.
+#[tauri::command]
+pub fn get_drag_dx(
+    drag_dx: tauri::State<Arc<AtomicI32>>,
+) -> Result<i32, String> {
+    Ok(drag_dx.swap(0, Ordering::SeqCst))
 }
