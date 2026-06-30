@@ -98,3 +98,15 @@ pub fn get_drag_dx(
 ) -> Result<i32, String> {
     Ok(drag_dx.swap(0, Ordering::SeqCst))
 }
+
+/// Quit the entire application — both pet and bubbles windows.
+#[tauri::command]
+pub fn close_pet(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+/// Restart the Tauri process, reloading the pet and reconnecting to sidecar.
+#[tauri::command]
+pub fn restart_pet(app: tauri::AppHandle) {
+    app.restart();
+}

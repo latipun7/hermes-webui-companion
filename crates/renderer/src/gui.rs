@@ -37,6 +37,7 @@ fn main() {
 
     // ── Tauri builder ─────────────────────────────────────────
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
         .manage(companion_state.clone())
         .manage(sidecar_healthy.clone())
         .manage(drag_dx.clone())
@@ -47,7 +48,9 @@ fn main() {
             commands::open_webui,
             commands::get_companion_state,
             commands::set_bubbles_visible,
-            commands::get_drag_dx
+            commands::get_drag_dx,
+            commands::close_pet,
+            commands::restart_pet
         ])
         .setup(move |app| {
             // Bridge server — receives WebUI snapshots
