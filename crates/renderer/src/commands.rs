@@ -113,7 +113,9 @@ pub fn restart_pet(app: tauri::AppHandle) {
 }
 
 /// Build the native context menu with Restart pet and Close pet items.
-fn build_context_menu(app: &tauri::AppHandle) -> Result<tauri::menu::Menu, tauri::Error> {
+fn build_context_menu(
+    app: &tauri::AppHandle,
+) -> Result<tauri::menu::Menu<tauri::Wry>, tauri::Error> {
     let restart = MenuItemBuilder::with_id("restart", "Restart pet").build(app)?;
     let close = MenuItemBuilder::with_id("close", "Close pet").build(app)?;
     MenuBuilder::new(app)
