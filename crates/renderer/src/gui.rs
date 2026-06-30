@@ -37,6 +37,7 @@ fn main() {
 
     // ── Tauri builder ─────────────────────────────────────────
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
         .manage(companion_state.clone())
         .manage(sidecar_healthy.clone())
         .manage(drag_dx.clone())
