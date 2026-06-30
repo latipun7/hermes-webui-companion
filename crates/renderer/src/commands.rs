@@ -114,19 +114,17 @@ pub fn restart_pet(app: tauri::AppHandle) {
 
 /// Switch to a new pet — called from on_menu_event when user clicks a pet in the submenu.
 /// This is NOT a #[tauri::command] (called internally from gui.rs menu handler).
-pub fn switch_pet_inner(app: tauri::AppHandle, slug: String) -> Result<(), String> {
+pub fn switch_pet_inner(_app: tauri::AppHandle, slug: String) -> Result<(), String> {
     let client = SidecarClient::new("http://127.0.0.1:17888".into());
 
     // 1. Select the new pet via sidecar (runs hermes pets select)
     client.select_pet(&slug).map_err(|e| e.error)?;
 
-    // 2. Fetch the new spritesheet
+    // 2. Verify the spritesheet is fetchable (preload check)
     client.fetch_spritesheet(&slug).map_err(|e| e.error)?;
 
-    // 3. Restart the app to reload with the new active pet
-    app.restart();
-
-    #[allow(unreachable_code)]
+    // Frontend will detect the slug change on next poll and reload in-place.
+    // No app restart needed — see ADR-003.
     Ok(())
 }
 

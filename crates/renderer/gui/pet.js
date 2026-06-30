@@ -59,6 +59,7 @@ async function invokeTauri(cmd, args = {}) {
 async function loadSpritesheet() {
   try {
     const pet = await invokeTauri("get_active_pet");
+    currentSlug = pet.slug;
     const bytes = await invokeTauri("get_spritesheet", { slug: pet.slug });
 
     // Convert bytes to base64 data URL
@@ -293,12 +294,54 @@ async function syncBubbleVisibility() {
 // Right-click context menu (native, via Tauri)
 // ---------------------------------------------------------------------------
 
+let currentSlug = null;
+
 function setupContextMenu() {
-  // Intercept right-click — show native OS context menu via Tauri
   document.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    invokeTauri("show_context_menu").catch(() => {});
+    invokeTauri("show_context_menu")
+      .then(() => reloadSpritesheetIfChanged())
+      .catch(() => {});
   });
+}
+
+/// After context menu dismisses, check if active pet changed.
+/// If so, reload the spritesheet in-place without restart.
+async function reloadSpritesheetIfChanged() {
+  try {
+    const pet = await invokeTauri("get_active_pet");
+    if (!currentSlug || pet.slug !== currentSlug) {
+      await reloadSpritesheet(pet.slug);
+    }
+  } catch (_) {
+    // Sidecar unreachable — keep current sprite
+  }
+}
+
+async function reloadSpritesheet(slug) {
+  try {
+    const bytes = await invokeTauri("get_spritesheet", { slug });
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const url = "data:image/webp;base64," + btoa(binary);
+
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        spriteDiv.style.backgroundImage = `url(${url})`;
+        currentSlug = slug;
+        currentState = "idle";
+        currentCol = 0;
+        resolve();
+      };
+      img.onerror = () => reject(new Error("failed to load spritesheet"));
+      img.src = url;
+    });
+  } catch (_) {
+    // Spritesheet load failed — keep current sprite, show error indicator
+  }
 }
 
 // ---------------------------------------------------------------------------
