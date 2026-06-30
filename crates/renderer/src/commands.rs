@@ -106,6 +106,5 @@ pub fn close_pet(app: tauri::AppHandle) {
 /// Restart the Tauri process, reloading the pet and reconnecting to sidecar.
 #[tauri::command]
 pub fn restart_pet(app: tauri::AppHandle) {
-    use tauri_plugin_process::ProcessExt;
     app.restart();
 }
