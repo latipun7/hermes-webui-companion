@@ -93,8 +93,19 @@ pub fn set_bubbles_visible(
 /// Return and reset the drag delta X since last call.
 /// Positive = dragging right, negative = dragging left.
 #[tauri::command]
-pub fn get_drag_dx(
-    drag_dx: tauri::State<Arc<AtomicI32>>,
-) -> Result<i32, String> {
+pub fn get_drag_dx(drag_dx: tauri::State<Arc<AtomicI32>>) -> Result<i32, String> {
     Ok(drag_dx.swap(0, Ordering::SeqCst))
+}
+
+/// Quit the entire application — both pet and bubbles windows.
+#[tauri::command]
+pub fn close_pet(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+/// Restart the Tauri process, reloading the pet and reconnecting to sidecar.
+#[tauri::command]
+pub fn restart_pet(app: tauri::AppHandle) {
+    use tauri_plugin_process::ProcessExt;
+    app.restart();
 }
