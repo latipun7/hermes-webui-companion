@@ -290,6 +290,18 @@ async function syncBubbleVisibility() {
 }
 
 // ---------------------------------------------------------------------------
+// Right-click context menu (native, via Tauri)
+// ---------------------------------------------------------------------------
+
+function setupContextMenu() {
+  // Intercept right-click — show native OS context menu via Tauri
+  document.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    invokeTauri("show_context_menu").catch(() => {});
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
 
@@ -299,6 +311,7 @@ async function main() {
   spriteDiv = document.getElementById(SPRITE_ID);
   setupDrag();
   setupBubbleToggle();
+  setupContextMenu();
 
   // Poll bridge to keep button in sync with auto-hide
   setInterval(syncBubbleVisibility, 1000);
