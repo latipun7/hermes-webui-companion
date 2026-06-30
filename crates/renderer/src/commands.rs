@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use companion_renderer::animation::{CompanionSnapshot, StateResponse};
 use companion_renderer::sidecar_client::SidecarClient;
 use tauri;
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
 
 use crate::debug;
 
@@ -109,4 +110,27 @@ pub fn close_pet(app: tauri::AppHandle) {
 #[tauri::command]
 pub fn restart_pet(app: tauri::AppHandle) {
     app.restart();
+}
+
+/// Build the native context menu with Restart pet and Close pet items.
+fn build_context_menu(app: &tauri::AppHandle) -> Result<tauri::menu::Menu, tauri::Error> {
+    let restart = MenuItemBuilder::with_id("restart", "Restart pet").build(app)?;
+    let close = MenuItemBuilder::with_id("close", "Close pet").build(app)?;
+    MenuBuilder::new(app)
+        .item(&restart)
+        .separator()
+        .item(&close)
+        .build()
+}
+
+/// Show the native context menu as a popup at the cursor position.
+#[tauri::command]
+pub fn show_context_menu(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let menu = build_context_menu(&app).map_err(|e| e.to_string())?;
+    window
+        .popup_menu(&menu)
+        .map_err(|e| e.to_string())
 }

@@ -290,82 +290,14 @@ async function syncBubbleVisibility() {
 }
 
 // ---------------------------------------------------------------------------
-// Right-click context menu
+// Right-click context menu (native, via Tauri)
 // ---------------------------------------------------------------------------
 
-const ctxMenu = document.getElementById("context-menu");
-let ctxVisible = false;
-
-function showContextMenu(x, y) {
-  if (!ctxMenu) return;
-
-  // Measure before making visible to get accurate dimensions
-  ctxMenu.style.display = "block";
-  const menuW = ctxMenu.offsetWidth || 180;
-  const menuH = ctxMenu.offsetHeight || 74;
-  ctxMenu.style.display = "";
-
-  const winW = window.innerWidth;
-  const winH = window.innerHeight;
-
-  // Auto-flip: if near right/bottom edge, shift menu to opposite side
-  let left = x;
-  let top = y;
-  if (x + menuW > winW) left = x - menuW;
-  if (y + menuH > winH) top = y - menuH;
-  // Clamp to viewport
-  if (left < 0) left = 0;
-  if (top < 0) top = 0;
-
-  ctxMenu.style.left = left + "px";
-  ctxMenu.style.top = top + "px";
-  ctxMenu.classList.add("show");
-  ctxVisible = true;
-}
-
-function hideContextMenu() {
-  if (!ctxMenu) return;
-  ctxMenu.classList.remove("show");
-  ctxVisible = false;
-}
-
 function setupContextMenu() {
-  if (!ctxMenu) return;
-
-  // Intercept right-click on entire document — blocks both
-  // the OS window menu (drag region) and WebView2 browser menu (no-drag region)
+  // Intercept right-click — show native OS context menu via Tauri
   document.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    showContextMenu(e.clientX, e.clientY);
-  });
-
-  // Dismiss on click outside
-  document.addEventListener("click", (e) => {
-    if (ctxVisible && !ctxMenu.contains(e.target)) {
-      hideContextMenu();
-    }
-  });
-
-  // Dismiss on Escape
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && ctxVisible) {
-      hideContextMenu();
-    }
-  });
-
-  // Handle menu item clicks
-  ctxMenu.addEventListener("click", async (e) => {
-    const item = e.target.closest(".ctx-item");
-    if (!item) return;
-
-    const action = item.dataset.action;
-    hideContextMenu();
-
-    if (action === "restart") {
-      await invokeTauri("restart_pet").catch(() => {});
-    } else if (action === "close") {
-      await invokeTauri("close_pet").catch(() => {});
-    }
+    invokeTauri("show_context_menu").catch(() => {});
   });
 }
 
