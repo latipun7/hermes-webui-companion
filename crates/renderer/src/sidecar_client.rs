@@ -212,8 +212,8 @@ impl SidecarClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
-    use std::net::TcpListener;
+    use std::io::{Read, Write};
+    use std::net::{Shutdown, TcpListener};
     use std::thread;
 
     /// Start a tiny HTTP server on a random port that responds with `body`
@@ -225,6 +225,8 @@ mod tests {
 
         thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
+            // Drain receive buffer, then flush with Shutdown::Write.
+            let _ = stream.read(&mut [0; 4096]);
             let response = format!(
                 "HTTP/1.1 {status} OK\r\nContent-Type: application/json\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n{body}",
                 status = status,
@@ -232,6 +234,7 @@ mod tests {
                 body = body,
             );
             stream.write_all(response.as_bytes()).unwrap();
+            let _ = stream.shutdown(Shutdown::Write);
         });
 
         port
@@ -269,12 +272,14 @@ mod tests {
 
             thread::spawn(move || {
                 let (mut stream, _) = listener.accept().unwrap();
+                let _ = stream.read(&mut [0; 4096]); // drain
                 let response = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: image/webp\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
                     body.len()
                 );
                 stream.write_all(response.as_bytes()).unwrap();
                 stream.write_all(&body).unwrap();
+                let _ = stream.shutdown(Shutdown::Write);
             });
 
             port

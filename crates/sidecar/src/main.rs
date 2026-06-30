@@ -274,10 +274,16 @@ async fn select_pet(
     Json(req): Json<SelectPetRequest>,
 ) -> Result<Json<SelectPetResponse>, (StatusCode, Json<ErrorBody>)> {
     // Run hermes pets select <slug>
-    let output = std::process::Command::new("hermes")
-        .args(["pets", "select", &req.slug])
-        .output()
-        .map_err(|e| {
+    let output = if cfg!(windows) {
+        std::process::Command::new("cmd")
+            .args(["/c", "hermes", "pets", "select", &req.slug])
+            .output()
+    } else {
+        std::process::Command::new("hermes")
+            .args(["pets", "select", &req.slug])
+            .output()
+    }
+    .map_err(|e| {
             (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody {
                 error: format!("hermes pets select failed: {}", e),
             }))
@@ -697,10 +703,11 @@ mod tests {
         }
         // Prepend fake-bin to PATH
         let old_path = std::env::var("PATH").unwrap_or_default();
+        let sep = if cfg!(windows) { ";" } else { ":" };
         unsafe {
             std::env::set_var(
                 "PATH",
-                format!("{}:{}", fake_bin.display(), old_path),
+                format!("{}{sep}{}", fake_bin.display(), old_path),
             );
         }
 
