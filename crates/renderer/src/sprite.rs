@@ -53,14 +53,8 @@ pub struct GridLayout {
 }
 
 /// Standard Petdex layout: 8×9 grid, 192×208px frames.
-pub const STANDARD_LAYOUT: GridLayout = GridLayout {
-    columns: 8,
-    rows: 9,
-    frame_size: FrameSize {
-        width: 192,
-        height: 208,
-    },
-};
+pub const STANDARD_LAYOUT: GridLayout =
+    GridLayout { columns: 8, rows: 9, frame_size: FrameSize { width: 192, height: 208 } };
 
 /// Error type for spritesheet parsing.
 #[derive(Debug)]
@@ -68,17 +62,9 @@ pub enum SpritesheetError {
     /// The image data could not be decoded.
     Decode(String),
     /// The spritesheet dimensions do not match the expected layout.
-    InvalidDimensions {
-        expected: (u32, u32),
-        actual: (u32, u32),
-    },
+    InvalidDimensions { expected: (u32, u32), actual: (u32, u32) },
     /// The requested frame index is out of bounds.
-    FrameOutOfBounds {
-        row: u32,
-        col: u32,
-        max_row: u32,
-        max_col: u32,
-    },
+    FrameOutOfBounds { row: u32, col: u32, max_row: u32, max_col: u32 },
 }
 
 /// A single animation frame extracted from the spritesheet.
@@ -103,10 +89,7 @@ impl Spritesheet {
             .or_else(|_| image::load(Cursor::new(data), image::ImageFormat::Png))
             .map_err(|e| SpritesheetError::Decode(e.to_string()))?;
 
-        Ok(Self {
-            source: img,
-            layout: STANDARD_LAYOUT,
-        })
+        Ok(Self { source: img, layout: STANDARD_LAYOUT })
     }
 
     /// Validate that the loaded image matches the expected grid dimensions.
@@ -142,8 +125,7 @@ impl Spritesheet {
 
         Ok(Frame {
             image: sub.to_rgba8(),
-            state: AnimationState::from_row(row)
-                .unwrap_or(AnimationState::Idle),
+            state: AnimationState::from_row(row).unwrap_or(AnimationState::Idle),
             col,
         })
     }
@@ -151,9 +133,7 @@ impl Spritesheet {
     /// Extract all frames for a given animation state (one full row).
     pub fn state_frames(&self, state: AnimationState) -> Result<Vec<Frame>, SpritesheetError> {
         let row = state as u32;
-        (0..self.layout.columns)
-            .map(|col| self.frame(row, col))
-            .collect()
+        (0..self.layout.columns).map(|col| self.frame(row, col)).collect()
     }
 }
 

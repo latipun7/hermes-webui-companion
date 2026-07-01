@@ -1,7 +1,7 @@
 //! Bubble window utilities — positioning, visibility polling.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::debug;
 
@@ -43,17 +43,19 @@ pub fn spawn_bubble_visibility_poller(
     let bv = bubbles_visible;
     let bw = bubbles;
     let mut was_visible = true;
-    std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_millis(250));
-        let want = bv.load(Ordering::SeqCst);
-        if want != was_visible {
-            was_visible = want;
-            if want {
-                let _ = bw.show();
-            } else {
-                let _ = bw.hide();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+            let want = bv.load(Ordering::SeqCst);
+            if want != was_visible {
+                was_visible = want;
+                if want {
+                    let _ = bw.show();
+                } else {
+                    let _ = bw.hide();
+                }
+                debug!("[companion:bubble] bubbles window visible = {want}");
             }
-            debug!("[companion:bubble] bubbles window visible = {want}");
         }
     });
 }

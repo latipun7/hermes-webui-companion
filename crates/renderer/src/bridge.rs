@@ -43,11 +43,7 @@ pub struct RawAttentionItem {
 
 /// Parse a raw WebUI snapshot into an animation-ready `CompanionSnapshot`.
 pub fn parse_snapshot(raw: &WebuiSnapshot) -> CompanionSnapshot {
-    let state = match raw
-        .companion
-        .as_ref()
-        .and_then(|c| c.state.as_deref())
-    {
+    let state = match raw.companion.as_ref().and_then(|c| c.state.as_deref()) {
         Some("running") => CompanionState::Running,
         Some("ready") => CompanionState::Ready,
         _ => CompanionState::Idle,
@@ -70,7 +66,7 @@ pub fn parse_snapshot(raw: &WebuiSnapshot) -> CompanionSnapshot {
                                 Some("clarify") => AttentionStatus::Clarify,
                                 _ => AttentionStatus::Approval, // default
                             }
-                        }
+                        },
                         Some("running") => AttentionStatus::Running,
                         Some("ready") => AttentionStatus::Ready,
                         _ => return None,
@@ -98,10 +94,8 @@ mod tests {
 
     #[test]
     fn parse_idle_snapshot() {
-        let raw: WebuiSnapshot = serde_json::from_str(
-            r#"{"companion":{"state":"idle","attention":[]}}"#,
-        )
-        .unwrap();
+        let raw: WebuiSnapshot =
+            serde_json::from_str(r#"{"companion":{"state":"idle","attention":[]}}"#).unwrap();
         let snap = parse_snapshot(&raw);
         assert_eq!(snap.state, CompanionState::Idle);
         assert!(snap.attention.is_empty());
@@ -109,20 +103,16 @@ mod tests {
 
     #[test]
     fn parse_running_snapshot() {
-        let raw: WebuiSnapshot = serde_json::from_str(
-            r#"{"companion":{"state":"running"}}"#,
-        )
-        .unwrap();
+        let raw: WebuiSnapshot =
+            serde_json::from_str(r#"{"companion":{"state":"running"}}"#).unwrap();
         let snap = parse_snapshot(&raw);
         assert_eq!(snap.state, CompanionState::Running);
     }
 
     #[test]
     fn parse_ready_snapshot() {
-        let raw: WebuiSnapshot = serde_json::from_str(
-            r#"{"companion":{"state":"ready"}}"#,
-        )
-        .unwrap();
+        let raw: WebuiSnapshot =
+            serde_json::from_str(r#"{"companion":{"state":"ready"}}"#).unwrap();
         let snap = parse_snapshot(&raw);
         assert_eq!(snap.state, CompanionState::Ready);
     }

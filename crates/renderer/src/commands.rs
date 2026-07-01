@@ -8,7 +8,6 @@ use std::sync::{Arc, Mutex};
 
 use companion_renderer::animation::{CompanionSnapshot, StateResponse};
 use companion_renderer::sidecar_client::SidecarClient;
-use tauri;
 use tauri::menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 
 use crate::debug;
@@ -54,22 +53,18 @@ pub fn open_webui() {
     }
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("open")
-            .arg("http://localhost:8787")
-            .spawn();
+        let _ = std::process::Command::new("open").arg("http://localhost:8787").spawn();
     }
     #[cfg(target_os = "linux")]
     {
-        let _ = std::process::Command::new("xdg-open")
-            .arg("http://localhost:8787")
-            .spawn();
+        let _ = std::process::Command::new("xdg-open").arg("http://localhost:8787").spawn();
     }
 }
 
 #[tauri::command]
 pub fn get_companion_state(
-    state: tauri::State<Arc<Mutex<CompanionSnapshot>>>,
-    sidecar_healthy: tauri::State<Arc<AtomicBool>>,
+    state: tauri::State<'_, Arc<Mutex<CompanionSnapshot>>>,
+    sidecar_healthy: tauri::State<'_, Arc<AtomicBool>>,
 ) -> Result<serde_json::Value, String> {
     let snap = state.lock().map_err(|e| e.to_string())?;
     let healthy = sidecar_healthy.load(Ordering::SeqCst);
@@ -81,7 +76,7 @@ pub fn get_companion_state(
 /// When hidden, mouse events reach windows underneath.
 #[tauri::command]
 pub fn set_bubbles_visible(
-    bubbles: tauri::State<tauri::WebviewWindow>,
+    bubbles: tauri::State<'_, tauri::WebviewWindow>,
     visible: bool,
 ) -> Result<(), String> {
     if visible {
@@ -94,9 +89,7 @@ pub fn set_bubbles_visible(
 /// Return and reset the drag delta X since last call.
 /// Positive = dragging right, negative = dragging left.
 #[tauri::command]
-pub fn get_drag_dx(
-    drag_dx: tauri::State<Arc<AtomicI32>>,
-) -> Result<i32, String> {
+pub fn get_drag_dx(drag_dx: tauri::State<'_, Arc<AtomicI32>>) -> Result<i32, String> {
     Ok(drag_dx.swap(0, Ordering::SeqCst))
 }
 
@@ -148,11 +141,7 @@ fn build_context_menu(
             .build(app)?;
         menu_builder = menu_builder.item(&disabled);
     }
-    menu_builder
-        .separator()
-        .item(&restart)
-        .item(&close)
-        .build()
+    menu_builder.separator().item(&restart).item(&close).build()
 }
 
 /// Build the Switch pet submenu by fetching installed pets from the sidecar.
@@ -162,15 +151,14 @@ fn build_switch_submenu(
     let client = SidecarClient::new("http://127.0.0.1:17888".into());
     let pet_list = client
         .fetch_pets()
-        .map_err(|_| tauri::Error::from(std::io::Error::new(std::io::ErrorKind::Other, "sidecar unreachable")))?;
+        .map_err(|_| tauri::Error::from(std::io::Error::other("sidecar unreachable")))?;
 
     let mut submenu = SubmenuBuilder::new(app, "Switch pet");
     for pet in &pet_list.pets {
         let id = format!("switch:{}", pet.slug);
         let is_active = pet.slug == pet_list.active;
-        let item = CheckMenuItemBuilder::with_id(id, &pet.display_name)
-            .checked(is_active)
-            .build(app)?;
+        let item =
+            CheckMenuItemBuilder::with_id(id, &pet.display_name).checked(is_active).build(app)?;
         submenu = submenu.item(&item);
     }
 
@@ -184,7 +172,5 @@ pub fn show_context_menu(
     app: tauri::AppHandle,
 ) -> Result<(), String> {
     let menu = build_context_menu(&app).map_err(|e| e.to_string())?;
-    window
-        .popup_menu(&menu)
-        .map_err(|e| e.to_string())
+    window.popup_menu(&menu).map_err(|e| e.to_string())
 }

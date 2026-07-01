@@ -69,10 +69,7 @@ impl HttpResponse {
     }
 
     fn not_found() -> Self {
-        Self {
-            status: 404,
-            body: r#"{"error":"not_found"}"#.into(),
-        }
+        Self { status: 404, body: r#"{"error":"not_found"}"#.into() }
     }
 }
 
@@ -86,7 +83,10 @@ fn handle_health() -> HttpResponse {
 }
 
 #[cfg(feature = "gui")]
-fn handle_get_state(snapshot: &Mutex<CompanionSnapshot>, sidecar_healthy: &AtomicBool) -> HttpResponse {
+fn handle_get_state(
+    snapshot: &Mutex<CompanionSnapshot>,
+    sidecar_healthy: &AtomicBool,
+) -> HttpResponse {
     let body = if let Ok(guard) = snapshot.lock() {
         let healthy = sidecar_healthy.load(Ordering::SeqCst);
         let resp = StateResponse::from_snapshot(&guard, healthy);
@@ -136,20 +136,20 @@ fn handle_post_snapshot(body: &[u8], snapshot: &Mutex<CompanionSnapshot>) -> Htt
                 *guard = snap;
             }
             HttpResponse::ok(r#"{"ok":true}"#.into())
-        }
+        },
         Err(_) => {
             debug!("[companion:bridge] failed to parse POST body");
             HttpResponse::ok(r#"{"ok":false,"error":"invalid_json"}"#.into())
-        }
+        },
     }
 }
 
 #[cfg(feature = "gui")]
 fn handle_post_bubbles_visible(body: &[u8], flag: &AtomicBool) -> HttpResponse {
-    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(body) {
-        if let Some(v) = json.get("visible").and_then(|v| v.as_bool()) {
-            flag.store(v, Ordering::SeqCst);
-        }
+    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(body)
+        && let Some(v) = json.get("visible").and_then(|v| v.as_bool())
+    {
+        flag.store(v, Ordering::SeqCst);
     }
     HttpResponse::ok(r#"{"ok":true}"#.into())
 }
@@ -157,10 +157,7 @@ fn handle_post_bubbles_visible(body: &[u8], flag: &AtomicBool) -> HttpResponse {
 #[cfg(feature = "gui")]
 fn handle_post_open_webui(body: &[u8], nav: &Mutex<Option<NavigationCommand>>) -> HttpResponse {
     if let Ok(json) = serde_json::from_slice::<serde_json::Value>(body) {
-        let sid = json
-            .get("session_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let sid = json.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
         if !sid.is_empty() {
             let cmd = serde_json::json!({
                 "id": format!("nav-{}", std::time::SystemTime::now()
@@ -218,7 +215,7 @@ pub fn spawn_bridge_server(state: BridgeState) {
         Err(e) => {
             eprintln!("[companion] bridge server bind failed: {e}");
             return;
-        }
+        },
     };
 
     let snapshot = state.snapshot;
@@ -229,7 +226,13 @@ pub fn spawn_bridge_server(state: BridgeState) {
     std::thread::spawn(move || {
         debug!("[companion:bridge] server listening on 127.0.0.1:17787");
         for mut request in server.incoming_requests() {
-            let response = route_request(&mut request, &snapshot, &navigation, &bubbles_visible, &sidecar_healthy);
+            let response = route_request(
+                &mut request,
+                &snapshot,
+                &navigation,
+                &bubbles_visible,
+                &sidecar_healthy,
+            );
             let _ = request.respond(response);
         }
     });
@@ -254,13 +257,13 @@ fn route_request(
 
         (Method::Get, "/api/state") | (Method::Get, "/api/state/") => {
             handle_get_state(snapshot, sidecar_healthy)
-        }
+        },
 
         (Method::Get, "/api/bubbles/visible") => handle_get_bubbles_visible(bubbles_visible),
 
         (Method::Get, url) if url.starts_with("/api/pet/navigation") => {
             handle_get_navigation(navigation)
-        }
+        },
 
         (Method::Post, "/api/pet/navigation_ack") => handle_post_navigation_ack(navigation),
 
@@ -268,19 +271,19 @@ fn route_request(
             let mut body = Vec::new();
             let _ = req.as_reader().read_to_end(&mut body);
             handle_post_snapshot(&body, snapshot)
-        }
+        },
 
         (Method::Post, "/api/bubbles/visible") => {
             let mut body = Vec::new();
             let _ = req.as_reader().read_to_end(&mut body);
             handle_post_bubbles_visible(&body, bubbles_visible)
-        }
+        },
 
         (Method::Post, "/api/open-webui") => {
             let mut body = Vec::new();
             let _ = req.as_reader().read_to_end(&mut body);
             handle_post_open_webui(&body, navigation)
-        }
+        },
 
         // CORS preflight — respond with allow-all headers
         (Method::Options, _) => HttpResponse::new(204, String::new()),
@@ -292,22 +295,14 @@ fn route_request(
     let body = handler_result.body;
     Response::from_string(body)
         .with_status_code(status)
-        .with_header(
-            Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
-        )
-        .with_header(
-            Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap(),
-        )
+        .with_header(Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap())
+        .with_header(Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap())
         .with_header(
             Header::from_bytes(&b"Access-Control-Allow-Methods"[..], &b"GET, POST, OPTIONS"[..])
                 .unwrap(),
         )
         .with_header(
-            Header::from_bytes(
-                &b"Access-Control-Allow-Headers"[..],
-                &b"Content-Type"[..],
-            )
-            .unwrap(),
+            Header::from_bytes(&b"Access-Control-Allow-Headers"[..], &b"Content-Type"[..]).unwrap(),
         )
 }
 
@@ -321,10 +316,7 @@ mod tests {
     use crate::animation::{AttentionStatus, CompanionState};
 
     fn test_snapshot() -> Arc<Mutex<CompanionSnapshot>> {
-        Arc::new(Mutex::new(CompanionSnapshot {
-            state: CompanionState::Idle,
-            attention: vec![],
-        }))
+        Arc::new(Mutex::new(CompanionSnapshot { state: CompanionState::Idle, attention: vec![] }))
     }
 
     fn test_navigation() -> Arc<Mutex<Option<NavigationCommand>>> {

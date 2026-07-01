@@ -118,7 +118,10 @@ impl StateResponse {
 /// - `CompanionState::Running` → `Running`
 /// - `CompanionState::Ready` → `Waving`
 /// - `CompanionState::Idle` → `Idle`
-pub fn resolve_animation_state(snapshot: &CompanionSnapshot, sidecar_healthy: bool) -> AnimationState {
+pub fn resolve_animation_state(
+    snapshot: &CompanionSnapshot,
+    sidecar_healthy: bool,
+) -> AnimationState {
     // Sidecar health takes absolute highest priority.
     // This flag is set by the health-check thread; incoming WebUI snapshots
     // cannot override it, preventing a flicker loop (Failed → Ready → Failed).
@@ -127,20 +130,12 @@ pub fn resolve_animation_state(snapshot: &CompanionSnapshot, sidecar_healthy: bo
     }
 
     // Approval has highest priority — scan first
-    if snapshot
-        .attention
-        .iter()
-        .any(|a| a.status == AttentionStatus::Approval)
-    {
+    if snapshot.attention.iter().any(|a| a.status == AttentionStatus::Approval) {
         return AnimationState::Waiting;
     }
 
     // Clarify is second priority
-    if snapshot
-        .attention
-        .iter()
-        .any(|a| a.status == AttentionStatus::Clarify)
-    {
+    if snapshot.attention.iter().any(|a| a.status == AttentionStatus::Clarify) {
         return AnimationState::Review;
     }
 
@@ -166,11 +161,7 @@ mod tests {
             state,
             attention: attention
                 .into_iter()
-                .map(|s| AttentionItem {
-                    status: s,
-                    text: None,
-                    session_id: None,
-                })
+                .map(|s| AttentionItem { status: s, text: None, session_id: None })
                 .collect(),
         }
     }
@@ -297,7 +288,7 @@ mod tests {
         let snap = snapshot(CompanionState::Ready, vec![AttentionStatus::Approval]);
         let resp = StateResponse::from_snapshot(&snap, false);
         assert_eq!(resp.resolved_animation, "failed"); // sidecar down overrides approval
-        assert_eq!(resp.state, CompanionState::Ready);  // original state preserved
+        assert_eq!(resp.state, CompanionState::Ready); // original state preserved
         assert_eq!(resp.attention.len(), 1);
     }
 }

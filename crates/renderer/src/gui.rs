@@ -63,8 +63,8 @@ fn main() {
                     if let Err(e) = commands::switch_pet_inner(app.clone(), slug.to_string()) {
                         eprintln!("[companion] switch pet failed: {}", e);
                     }
-                }
-                _ => {}
+                },
+                _ => {},
             }
         })
         .setup(move |app| {
@@ -77,12 +77,8 @@ fn main() {
             });
 
             // Windows
-            let window = app
-                .get_webview_window("main")
-                .expect("main window not found");
-            let bubbles = app
-                .get_webview_window("bubbles")
-                .expect("bubbles window not found");
+            let window = app.get_webview_window("main").expect("main window not found");
+            let bubbles = app.get_webview_window("bubbles").expect("bubbles window not found");
             let _ = bubbles.show();
             app.manage(bubbles.clone());
 
@@ -110,7 +106,7 @@ fn main() {
                         }
                         reposition_bubble(&win2, &bubbles);
                         resizing.store(false, Ordering::SeqCst);
-                    }
+                    },
                     WindowEvent::Moved(pos) => {
                         if let Ok(mut lp) = last_pos2.lock() {
                             let dx = pos.x - lp.0;
@@ -120,8 +116,8 @@ fn main() {
                             *lp = (pos.x, pos.y);
                         }
                         reposition_bubble(&win2, &bubbles);
-                    }
-                    _ => {}
+                    },
+                    _ => {},
                 }
             });
 

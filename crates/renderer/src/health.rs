@@ -5,8 +5,8 @@
 //! flicker loop. Both the sidecar (:17888) and WebUI (:8787 or
 //! `HERMES_WEBUI_PORT`) must be healthy for the flag to be `true`.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use companion_renderer::sidecar_client::SidecarClient;
 
@@ -23,12 +23,7 @@ fn webui_base_url() -> String {
 /// WebUI returns `{"status": "ok", ...}` (not `{"ok": true}` like the sidecar).
 pub(crate) fn check_webui_health() -> bool {
     let url = format!("{}/health", webui_base_url());
-    match ureq::get(&url)
-        .config()
-        .http_status_as_error(false)
-        .build()
-        .call()
-    {
+    match ureq::get(&url).config().http_status_as_error(false).build().call() {
         Ok(response) if response.status() == 200 => response
             .into_body()
             .read_json::<serde_json::Value>()
@@ -36,10 +31,7 @@ pub(crate) fn check_webui_health() -> bool {
             .map(|v| {
                 // WebUI returns {"status": "ok", ...}
                 // Also accept {"ok": true} for compatibility
-                v.get("status")
-                    .and_then(|s| s.as_str())
-                    .map(|s| s == "ok")
-                    .unwrap_or(false)
+                v.get("status").and_then(|s| s.as_str()).map(|s| s == "ok").unwrap_or(false)
                     || v.get("ok").and_then(|ok| ok.as_bool()).unwrap_or(false)
             })
             .unwrap_or(false),
@@ -61,36 +53,35 @@ pub fn spawn_health_check() -> Arc<AtomicBool> {
         debug!("[companion:health] sidecar unreachable at startup → Failed");
     }
     if !webui_ok {
-        debug!(
-            "[companion:health] webui unreachable at startup ({}) → Failed",
-            webui_base_url()
-        );
+        debug!("[companion:health] webui unreachable at startup ({}) → Failed", webui_base_url());
     }
 
     let all_healthy = Arc::new(AtomicBool::new(initial_healthy));
 
     {
         let all_healthy = all_healthy.clone();
-        std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_secs(10));
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(10));
 
-            let sidecar_ok = sidecar_client.check_health();
-            let webui_ok = check_webui_health();
-            let healthy = sidecar_ok && webui_ok;
+                let sidecar_ok = sidecar_client.check_health();
+                let webui_ok = check_webui_health();
+                let healthy = sidecar_ok && webui_ok;
 
-            let was = all_healthy.swap(healthy, Ordering::SeqCst);
-            if !healthy && was {
-                if !sidecar_ok {
-                    debug!("[companion:health] sidecar unreachable → Failed");
+                let was = all_healthy.swap(healthy, Ordering::SeqCst);
+                if !healthy && was {
+                    if !sidecar_ok {
+                        debug!("[companion:health] sidecar unreachable → Failed");
+                    }
+                    if !webui_ok {
+                        debug!(
+                            "[companion:health] webui unreachable ({}) → Failed",
+                            webui_base_url()
+                        );
+                    }
+                } else if healthy && !was {
+                    debug!("[companion:health] all services recovered → Idle");
                 }
-                if !webui_ok {
-                    debug!(
-                        "[companion:health] webui unreachable ({}) → Failed",
-                        webui_base_url()
-                    );
-                }
-            } else if healthy && !was {
-                debug!("[companion:health] all services recovered → Idle");
             }
         });
     }
@@ -131,8 +122,11 @@ mod tests {
         port
     }
 
+    #[allow(unsafe_code)]
     fn with_webui_port(port: u16) {
-        std::env::set_var("HERMES_WEBUI_PORT", port.to_string());
+        unsafe {
+            std::env::set_var("HERMES_WEBUI_PORT", port.to_string());
+        }
     }
 
     #[test]

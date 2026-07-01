@@ -94,28 +94,22 @@ struct SelectPetResponse {
 // ---------------------------------------------------------------------------
 
 async fn health() -> Json<Health> {
-    Json(Health {
-        ok: true,
-        service: "hermes-webui-companion-sidecar",
-    })
+    Json(Health { ok: true, service: "hermes-webui-companion-sidecar" })
 }
 
 async fn get_active_pet(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ActivePet>, (StatusCode, Json<ErrorBody>)> {
     let config: serde_yaml_ng::Value = serde_yaml_ng::from_str(
-        &tokio::fs::read_to_string(state.config_path())
-            .await
-            .map_err(|_| {
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody {
-                    error: "cannot read config".into(),
-                }))
-            })?,
+        &tokio::fs::read_to_string(state.config_path()).await.map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody { error: "cannot read config".into() }),
+            )
+        })?,
     )
     .map_err(|_| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody {
-            error: "invalid config".into(),
-        }))
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { error: "invalid config".into() }))
     })?;
 
     let pet_enabled = config
@@ -126,9 +120,7 @@ async fn get_active_pet(
         .unwrap_or(false);
 
     if !pet_enabled {
-        return Err((StatusCode::NOT_FOUND, Json(ErrorBody {
-            error: "no_active_pet".into(),
-        })));
+        return Err((StatusCode::NOT_FOUND, Json(ErrorBody { error: "no_active_pet".into() })));
     }
 
     let slug = config
@@ -141,13 +133,9 @@ async fn get_active_pet(
     let slug = match slug {
         Some(s) => s.to_string(),
         None => {
-            let mut entries = tokio::fs::read_dir(state.pets_dir())
-                .await
-                .map_err(|_| {
-                    (StatusCode::NOT_FOUND, Json(ErrorBody {
-                        error: "no_active_pet".into(),
-                    }))
-                })?;
+            let mut entries = tokio::fs::read_dir(state.pets_dir()).await.map_err(|_| {
+                (StatusCode::NOT_FOUND, Json(ErrorBody { error: "no_active_pet".into() }))
+            })?;
             let mut found = None;
             while let Ok(Some(entry)) = entries.next_entry().await {
                 if entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
@@ -155,17 +143,17 @@ async fn get_active_pet(
                     break;
                 }
             }
-            found.ok_or((StatusCode::NOT_FOUND, Json(ErrorBody {
-                error: "no_active_pet".into(),
-            })))?
-        }
+            found
+                .ok_or((StatusCode::NOT_FOUND, Json(ErrorBody { error: "no_active_pet".into() })))?
+        },
     };
 
     let spritesheet_path = state.pets_dir().join(&slug).join("spritesheet.webp");
     if !spritesheet_path.exists() {
-        return Err((StatusCode::NOT_FOUND, Json(ErrorBody {
-            error: "spritesheet not found".into(),
-        })));
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody { error: "spritesheet not found".into() }),
+        ));
     }
 
     Ok(Json(ActivePet {
@@ -180,13 +168,9 @@ async fn serve_spritesheet(
     Path(slug): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorBody>)> {
     let spritesheet_path = state.pets_dir().join(&slug).join("spritesheet.webp");
-    let bytes = tokio::fs::read(&spritesheet_path)
-        .await
-        .map_err(|_| {
-            (StatusCode::NOT_FOUND, Json(ErrorBody {
-                error: "spritesheet not found".into(),
-            }))
-        })?;
+    let bytes = tokio::fs::read(&spritesheet_path).await.map_err(|_| {
+        (StatusCode::NOT_FOUND, Json(ErrorBody { error: "spritesheet not found".into() }))
+    })?;
 
     Ok(([(axum::http::header::CONTENT_TYPE, "image/webp")], bytes))
 }
@@ -195,13 +179,12 @@ async fn list_pets(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<PetList>, (StatusCode, Json<ErrorBody>)> {
     let mut pets = Vec::new();
-    let mut entries = tokio::fs::read_dir(state.pets_dir())
-        .await
-        .map_err(|_| {
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody {
-                error: "cannot read pets directory".into(),
-            }))
-        })?;
+    let mut entries = tokio::fs::read_dir(state.pets_dir()).await.map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody { error: "cannot read pets directory".into() }),
+        )
+    })?;
 
     while let Ok(Some(entry)) = entries.next_entry().await {
         if !entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
@@ -217,23 +200,14 @@ async fn list_pets(
         }
 
         let display_name = match tokio::fs::read_to_string(&pet_json_path).await {
-            Ok(contents) => {
-                serde_json::from_str::<serde_json::Value>(&contents)
-                    .ok()
-                    .and_then(|v| {
-                        v.get("displayName")
-                            .and_then(|dn| dn.as_str())
-                            .map(String::from)
-                    })
-                    .unwrap_or_else(|| slug.clone())
-            }
+            Ok(contents) => serde_json::from_str::<serde_json::Value>(&contents)
+                .ok()
+                .and_then(|v| v.get("displayName").and_then(|dn| dn.as_str()).map(String::from))
+                .unwrap_or_else(|| slug.clone()),
             Err(_) => slug.clone(),
         };
 
-        pets.push(PetEntry {
-            slug,
-            display_name,
-        });
+        pets.push(PetEntry { slug, display_name });
     }
 
     // Read active slug from config
@@ -245,18 +219,15 @@ async fn list_pets(
 /// Helper: read the active pet slug from config.yaml.
 async fn get_active_slug(state: &AppState) -> Result<String, (StatusCode, Json<ErrorBody>)> {
     let config: serde_yaml_ng::Value = serde_yaml_ng::from_str(
-        &tokio::fs::read_to_string(state.config_path())
-            .await
-            .map_err(|_| {
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody {
-                    error: "cannot read config".into(),
-                }))
-            })?,
+        &tokio::fs::read_to_string(state.config_path()).await.map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody { error: "cannot read config".into() }),
+            )
+        })?,
     )
     .map_err(|_| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody {
-            error: "invalid config".into(),
-        }))
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { error: "invalid config".into() }))
     })?;
 
     Ok(config
@@ -279,21 +250,21 @@ async fn select_pet(
             .args(["/c", "hermes", "pets", "select", &req.slug])
             .output()
     } else {
-        std::process::Command::new("hermes")
-            .args(["pets", "select", &req.slug])
-            .output()
+        std::process::Command::new("hermes").args(["pets", "select", &req.slug]).output()
     }
     .map_err(|e| {
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody {
-                error: format!("hermes pets select failed: {}", e),
-            }))
-        })?;
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody { error: format!("hermes pets select failed: {}", e) }),
+        )
+    })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody {
-            error: format!("hermes pets select failed: {}", stderr.trim()),
-        })));
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody { error: format!("hermes pets select failed: {}", stderr.trim()) }),
+        ));
     }
 
     // Read display_name from pet.json
@@ -302,24 +273,14 @@ async fn select_pet(
         tokio::fs::read_to_string(&pet_json_path)
             .await
             .ok()
-            .and_then(|contents| {
-                serde_json::from_str::<serde_json::Value>(&contents).ok()
-            })
-            .and_then(|v| {
-                v.get("displayName")
-                    .and_then(|dn| dn.as_str())
-                    .map(String::from)
-            })
+            .and_then(|contents| serde_json::from_str::<serde_json::Value>(&contents).ok())
+            .and_then(|v| v.get("displayName").and_then(|dn| dn.as_str()).map(String::from))
             .unwrap_or_else(|| req.slug.clone())
     } else {
         req.slug.clone()
     };
 
-    Ok(Json(SelectPetResponse {
-        ok: true,
-        slug: req.slug,
-        display_name,
-    }))
+    Ok(Json(SelectPetResponse { ok: true, slug: req.slug, display_name }))
 }
 
 // ---------------------------------------------------------------------------
@@ -368,9 +329,7 @@ mod tests {
 
     fn setup_state() -> (TempDir, AppState) {
         let dir = TempDir::new().unwrap();
-        let state = AppState {
-            hermes_home: dir.path().to_path_buf(),
-        };
+        let state = AppState { hermes_home: dir.path().to_path_buf() };
         (dir, state)
     }
 
@@ -380,20 +339,12 @@ mod tests {
         let router = build_router(state);
 
         let response = router
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/health")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(axum::http::Request::builder().uri("/health").body(Body::empty()).unwrap())
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body = BodyExt::collect(response.into_body())
-            .await
-            .unwrap()
-            .to_bytes();
+        let body = BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["ok"], true);
         assert_eq!(json["service"], "hermes-webui-companion-sidecar");
@@ -417,19 +368,13 @@ mod tests {
         let router = build_router(state);
         let response = router
             .oneshot(
-                axum::http::Request::builder()
-                    .uri("/api/pet/active")
-                    .body(Body::empty())
-                    .unwrap(),
+                axum::http::Request::builder().uri("/api/pet/active").body(Body::empty()).unwrap(),
             )
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body = BodyExt::collect(response.into_body())
-            .await
-            .unwrap()
-            .to_bytes();
+        let body = BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["slug"], "boba");
         assert_eq!(json["spritesheet_url"], "/pets/boba/spritesheet.webp");
@@ -448,19 +393,13 @@ mod tests {
         let router = build_router(state);
         let response = router
             .oneshot(
-                axum::http::Request::builder()
-                    .uri("/api/pet/active")
-                    .body(Body::empty())
-                    .unwrap(),
+                axum::http::Request::builder().uri("/api/pet/active").body(Body::empty()).unwrap(),
             )
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        let body = BodyExt::collect(response.into_body())
-            .await
-            .unwrap()
-            .to_bytes();
+        let body = BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error"], "no_active_pet");
     }
@@ -489,19 +428,13 @@ mod tests {
         let router = build_router(state);
         let response = router
             .oneshot(
-                axum::http::Request::builder()
-                    .uri("/api/pet/active")
-                    .body(Body::empty())
-                    .unwrap(),
+                axum::http::Request::builder().uri("/api/pet/active").body(Body::empty()).unwrap(),
             )
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body = BodyExt::collect(response.into_body())
-            .await
-            .unwrap()
-            .to_bytes();
+        let body = BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         // Should pick the first directory found (directory order is OS-dependent,
         // but both "boba" and "nyan" are valid — we just assert a slug was returned)
@@ -532,17 +465,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let content_type = response
-            .headers()
-            .get(axum::http::header::CONTENT_TYPE)
-            .unwrap()
-            .to_str()
-            .unwrap();
+        let content_type =
+            response.headers().get(axum::http::header::CONTENT_TYPE).unwrap().to_str().unwrap();
         assert_eq!(content_type, "image/webp");
-        let body = BodyExt::collect(response.into_body())
-            .await
-            .unwrap()
-            .to_bytes();
+        let body = BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
         assert_eq!(&body[..], b"fake-webp-bytes");
     }
 
@@ -561,10 +487,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        let body = BodyExt::collect(response.into_body())
-            .await
-            .unwrap()
-            .to_bytes();
+        let body = BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error"], "spritesheet not found");
     }
@@ -594,20 +517,12 @@ mod tests {
 
         let router = build_router(state);
         let response = router
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/api/pets")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(axum::http::Request::builder().uri("/api/pets").body(Body::empty()).unwrap())
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body = BodyExt::collect(response.into_body())
-            .await
-            .unwrap()
-            .to_bytes();
+        let body = BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         let pets = json["pets"].as_array().unwrap();
@@ -645,20 +560,12 @@ mod tests {
 
         let router = build_router(state);
         let response = router
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/api/pets")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(axum::http::Request::builder().uri("/api/pets").body(Body::empty()).unwrap())
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body = BodyExt::collect(response.into_body())
-            .await
-            .unwrap()
-            .to_bytes();
+        let body = BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         let pets = json["pets"].as_array().unwrap();
@@ -688,27 +595,26 @@ mod tests {
         // Create a fake hermes script that exits 0
         let fake_bin = home.path().join("fake-bin");
         std::fs::create_dir_all(&fake_bin).unwrap();
-        let hermes_script = if cfg!(windows) {
-            format!("@echo off\r\nexit /b 0\r\n")
+        let hermes_script: String = if cfg!(windows) {
+            "@echo off\r\nexit /b 0\r\n".to_string()
         } else {
-            format!("#!/bin/sh\nexit 0\n")
+            "#!/bin/sh\nexit 0\n".to_string()
         };
         let script_path = fake_bin.join(if cfg!(windows) { "hermes.bat" } else { "hermes" });
         std::fs::write(&script_path, &hermes_script).unwrap();
+
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))
-                .unwrap();
+            std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
         // Prepend fake-bin to PATH
         let old_path = std::env::var("PATH").unwrap_or_default();
         let sep = if cfg!(windows) { ";" } else { ":" };
+
+        #[allow(unsafe_code)]
         unsafe {
-            std::env::set_var(
-                "PATH",
-                format!("{}{sep}{}", fake_bin.display(), old_path),
-            );
+            std::env::set_var("PATH", format!("{}{sep}{}", fake_bin.display(), old_path));
         }
 
         let router = build_router(state);
@@ -725,16 +631,16 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body = BodyExt::collect(response.into_body())
-            .await
-            .unwrap()
-            .to_bytes();
+        let body = BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["ok"], true);
         assert_eq!(json["slug"], "nika");
         assert_eq!(json["display_name"], "Nika");
 
         // Restore PATH
-        unsafe { std::env::set_var("PATH", old_path); }
+        #[allow(unsafe_code)]
+        unsafe {
+            std::env::set_var("PATH", old_path);
+        }
     }
 }

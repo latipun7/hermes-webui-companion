@@ -71,24 +71,19 @@ impl SidecarClient {
             .http_status_as_error(false)
             .build()
             .call()
-            .map_err(|e| SidecarError {
-                error: format!("http error: {}", e),
-            })?;
+            .map_err(|e| SidecarError { error: format!("http error: {}", e) })?;
 
         let status = response.status();
         if status == 200 {
-            response.into_body().read_json::<ActivePetResponse>().map_err(|e| {
-                SidecarError {
-                    error: format!("parse error: {}", e),
-                }
-            })
+            response
+                .into_body()
+                .read_json::<ActivePetResponse>()
+                .map_err(|e| SidecarError { error: format!("parse error: {}", e) })
         } else {
             Err(response
                 .into_body()
                 .read_json::<SidecarError>()
-                .unwrap_or(SidecarError {
-                    error: format!("unexpected status: {}", status),
-                }))
+                .unwrap_or(SidecarError { error: format!("unexpected status: {}", status) }))
         }
     }
 
@@ -100,22 +95,19 @@ impl SidecarClient {
             .http_status_as_error(false)
             .build()
             .call()
-            .map_err(|e| SidecarError {
-                error: format!("http error: {}", e),
-            })?;
+            .map_err(|e| SidecarError { error: format!("http error: {}", e) })?;
 
         let status = response.status();
         if status == 200 {
-            response.into_body().read_to_vec().map_err(|e| SidecarError {
-                error: format!("read error: {}", e),
-            })
+            response
+                .into_body()
+                .read_to_vec()
+                .map_err(|e| SidecarError { error: format!("read error: {}", e) })
         } else {
             Err(response
                 .into_body()
                 .read_json::<SidecarError>()
-                .unwrap_or(SidecarError {
-                    error: format!("unexpected status: {}", status),
-                }))
+                .unwrap_or(SidecarError { error: format!("unexpected status: {}", status) }))
         }
     }
     /// Check whether the sidecar is healthy (application-level).
@@ -128,12 +120,7 @@ impl SidecarClient {
     /// ...
     pub fn check_health(&self) -> bool {
         let url = format!("{}/health", self.base_url);
-        match ureq::get(&url)
-            .config()
-            .http_status_as_error(false)
-            .build()
-            .call()
-        {
+        match ureq::get(&url).config().http_status_as_error(false).build().call() {
             Ok(response) if response.status() == 200 => response
                 .into_body()
                 .read_json::<serde_json::Value>()
@@ -152,24 +139,19 @@ impl SidecarClient {
             .http_status_as_error(false)
             .build()
             .call()
-            .map_err(|e| SidecarError {
-                error: format!("http error: {}", e),
-            })?;
+            .map_err(|e| SidecarError { error: format!("http error: {}", e) })?;
 
         let status = response.status();
         if status == 200 {
-            response.into_body().read_json::<PetListResponse>().map_err(|e| {
-                SidecarError {
-                    error: format!("parse error: {}", e),
-                }
-            })
+            response
+                .into_body()
+                .read_json::<PetListResponse>()
+                .map_err(|e| SidecarError { error: format!("parse error: {}", e) })
         } else {
             Err(response
                 .into_body()
                 .read_json::<SidecarError>()
-                .unwrap_or(SidecarError {
-                    error: format!("unexpected status: {}", status),
-                }))
+                .unwrap_or(SidecarError { error: format!("unexpected status: {}", status) }))
         }
     }
 
@@ -182,25 +164,19 @@ impl SidecarClient {
             .http_status_as_error(false)
             .build()
             .send_json(&body)
-            .map_err(|e| SidecarError {
-                error: format!("http error: {}", e),
-            })?;
+            .map_err(|e| SidecarError { error: format!("http error: {}", e) })?;
 
         let status = response.status();
         if status == 200 {
             response
                 .into_body()
                 .read_json::<SelectPetResponse>()
-                .map_err(|e| SidecarError {
-                    error: format!("parse error: {}", e),
-                })
+                .map_err(|e| SidecarError { error: format!("parse error: {}", e) })
         } else {
             Err(response
                 .into_body()
                 .read_json::<SidecarError>()
-                .unwrap_or(SidecarError {
-                    error: format!("unexpected status: {}", status),
-                }))
+                .unwrap_or(SidecarError { error: format!("unexpected status: {}", status) }))
         }
     }
 }
@@ -341,10 +317,7 @@ mod tests {
 
     #[test]
     fn select_pet_success() {
-        let port = serve_once(
-            200,
-            r#"{"ok":true,"slug":"nika","display_name":"Nika"}"#,
-        );
+        let port = serve_once(200, r#"{"ok":true,"slug":"nika","display_name":"Nika"}"#);
         let client = SidecarClient::new(format!("http://127.0.0.1:{}", port));
         let result = client.select_pet("nika").unwrap();
         assert!(result.ok);
