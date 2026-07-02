@@ -90,7 +90,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: 📦 Install Tauri CLI
-        run: npx --yes @tauri-apps/cli@latest --help > /dev/null 2>&1 || true
+        run: npx --yes @tauri-apps/cli@latest --help
 
       - name: ♻️ Cache Cargo
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
