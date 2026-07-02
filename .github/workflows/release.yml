@@ -90,7 +90,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: 📦 Install Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
+        run: npx --yes @tauri-apps/cli@latest --help > /dev/null 2>&1 || true
 
       - name: ♻️ Cache Cargo
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -104,7 +104,7 @@ jobs:
             cargo-renderer-${{ matrix.target }}-
 
       - name: 🛠️ Tauri Build
-        run: cargo tauri build --locked --features gui
+        run: npx --yes @tauri-apps/cli@latest build --features gui
         working-directory: crates/renderer
 
       - name: 📁 Stage (Linux/macOS)
