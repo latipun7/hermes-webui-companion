@@ -35,8 +35,9 @@ jobs:
           path: |
             ~/.cargo/
             target/
-          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-sidecar-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
+            cargo-sidecar-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
             cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
             cargo-${{ runner.os }}-
 
@@ -101,8 +102,9 @@ jobs:
           path: |
             ~/.cargo/
             target/
-          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-renderer-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
+            cargo-renderer-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
             cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
             cargo-${{ runner.os }}-
 
