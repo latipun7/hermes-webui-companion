@@ -4,26 +4,28 @@
 **Date:** 2026-06-30
 **Author:** Latif + Hermes
 
+> **Domain glossary:** [`context.md`](../context.md) — canonical definitions for all terms used in this PRD.
+
 ---
 
 ## Problem Statement
 
 Hermes Agent has a rich pet system (`hermes pets`) that installs animated companion spritesheets from [petdex.dev](https://petdex.dev) and renders them in the terminal (CLI/TUI) and the Hermes desktop (Electron) app. The [Desktop Companion extension](https://github.com/hermes-webui/hermes-webui-extensions/tree/main/extensions/desktop-companion) for Hermes WebUI is only a bridge — it monitors WebUI sessions and POSTs snapshots to a local loopback sidecar. It does NOT render pets by itself. To see a pet on the desktop, the user must also run a Node.js sidecar + a Tauri native shell from a separate repo (`franksong2702/hermes-webui-desktop-companion`). This three-tier architecture (bridge → Node.js sidecar → Tauri shell) is complex, has no direct integration with Hermes' own pet system, and requires the user to manage two separate pet skin directories.
 
-The user runs Hermes Agent and Hermes WebUI inside WSL (Arch Linux), and wants a native Windows desktop pet renderer that:
+The user runs Hermes Agent and Hermes WebUI inside WSL (Arch Linux), and wants a cross-platform desktop pet renderer that:
 
 1. Reads pets directly from the Hermes pet directory inside WSL (`~/.hermes/pets/<slug>/`)
 2. Respects Hermes' active pet configuration (`display.pet.slug` in `~/.hermes/config.yaml`)
 3. Renders the pet with transparency and always-on-top window behavior
-4. Reacts to agent state (idle, running, reviewing, error, done) based on WebUI session snapshots
+4. Reacts to companion state (idle, running, waiting, review, waving, failed) based on WebUI session snapshots
 5. Is a single, self-contained native application — no Node.js dependency
 
 ## Solution
 
 A Rust workspace with two binaries:
 
-- **`hermes-webui-companion-sidecar`** — A tiny HTTP server running inside WSL that bridges the filesystem boundary. It serves Hermes pet configuration (`GET /api/pet/active`) and spritesheet files (`GET /pets/{slug}/spritesheet.webp`) to the Windows host via `localhost`.
-- **`hermes-webui-companion-renderer`** — A Tauri v2 desktop application running natively on Windows that:
+- **`hermes-webui-companion-sidecar`** — A tiny HTTP server running inside WSL that bridges the filesystem boundary. It serves Hermes pet configuration (`GET /api/pet/active`) and spritesheet files (`GET /pets/{slug}/spritesheet.webp`) to the host OS via `localhost`.
+- **`hermes-webui-companion-renderer`** — A Tauri v2 cross-platform desktop application that:
   - Fetches the active pet config and spritesheet from the WSL sidecar at startup
   - Renders an animated, transparent, always-on-top desktop pet using CSS sprites
   - Listens for WebUI state snapshots (via the companion-adapter.js protocol) to drive animation states
@@ -70,15 +72,15 @@ The spritesheet format is the Codex Pet standard — 192×208px frames in an 8×
 
 ## User Stories
 
-1. As a Hermes user, I want to see my active Hermes pet rendered on my Windows desktop.
+1. As a Hermes user, I want to see my active Hermes pet rendered on my desktop.
 2. As a Hermes user, I want the pet to automatically match whatever pet I selected with `hermes pets select <slug>`.
-3. As a Hermes user, I want the pet to animate differently based on what Hermes is doing (idle, running, reviewing, error).
+3. As a Hermes user, I want the pet to animate differently based on my Hermes session state — idle, running, waiting (pending approval), review (pending clarification), waving (session complete), and failed (sidecar unreachable).
 4. As a Hermes user, I want the pet window to be transparent and always-on-top.
 5. As a Hermes user, I want to see notification bubbles from the pet when sessions need attention.
 6. As a Hermes user running WSL, I want the pet renderer to work without manual filesystem path hacks.
 7. As a developer, I want the sidecar to auto-start with WSL as a systemd user service.
 8. As a first-time user, I want to install the pet renderer once and have it auto-detect my Hermes setup.
-9. As a user who switches pets frequently, I want the renderer to respect config changes without restarting.
+9. As a user who switches pets frequently, I want the renderer to detect active pet changes (via `hermes pets select`) and reload the spritesheet in-place without restarting the Tauri process.
 10. As a user, I want to switch my active pet from the pet window's right-click menu without touching the terminal.
 11. As a developer, I want linting and formatting enforced before every commit so the codebase stays consistent.
 12. As a developer, I want CI to run all checks (fmt, clippy, tests) on every push/PR so I can merge with confidence.
@@ -170,18 +172,20 @@ CORS is handled with full headers (Allow-Origin, Allow-Methods, Allow-Headers) a
 
 ### Animation State Machine
 
-The priority chain `sidecar down > Failed > Approval > Clarify > agent state` is centralized in `animation.rs::resolve_animation_state()`. The `GET /api/state` endpoint returns a `resolved_animation` field so frontends never re-implement priority logic. A `sidecar_healthy` AtomicBool flag prevents race conditions where incoming WebUI snapshots overwrite a health-check-triggered Failed state.
+The priority chain **sidecar unhealthy → Approval → Clarify → companion state** is centralized in `animation.rs::resolve_animation_state()`. The bridge server's `GET /api/state` endpoint returns a `resolved_animation` field so frontends never re-implement priority logic. A `sidecar_healthy` AtomicBool flag prevents race conditions where incoming WebUI snapshots overwrite a health-check-triggered Failed state.
 
-Animation state mapping — priority: Approval > Clarify > agent state:
+Animation state mapping — canonical terms from [`context.md`](../../context.md):
 
-| Input                              | Pet animation state |
-| ---------------------------------- | ------------------- |
-| sidecar unreachable                | `failed`            |
-| `attention[].status == "approval"` | `waiting`           |
-| `attention[].status == "clarify"`  | `review`            |
-| `companion.state == "running"`     | `running`           |
-| `companion.state == "ready"`       | `waving`            |
-| `companion.state == "idle"`        | `idle`              |
+| Input                     | Animation State |
+| ------------------------- | --------------- |
+| sidecar unreachable       | `Failed`        |
+| `Approval` attention item | `Waiting`       |
+| `Clarify` attention item  | `Review`        |
+| companion state `Running` | `Running`       |
+| companion state `Ready`   | `Waving`        |
+| companion state `Idle`    | `Idle`          |
+
+Note: `CompanionState::Failed` in a snapshot does NOT trigger `AnimationState::Failed` — only the `sidecar_healthy == false` flag does. When the sidecar is healthy, `CompanionState::Failed` falls through to the priority chain like any other state.
 
 ### Spritesheet Parsing
 
@@ -205,7 +209,7 @@ A native Tauri menu built with `MenuBuilder` and `SubmenuBuilder`:
 
 - **Restart** — kills and re-launches the companion process via `tauri-plugin-process`
 - **Close** — `app.exit(0)`
-- **Switch pet** — submenu listing all installed pets from the sidecar, with a checkmark on the active pet. Clicking triggers `select_pet_slug` config write via the sidecar.
+- **Switch pet** — submenu listing all installed pets from the sidecar, with a checkmark on the active pet. Clicking triggers the `switch_pet` flow: sidecar runs `hermes pets select <slug>`, then the renderer fetches the new spritesheet and reloads in-place.
 
 The `Switch pet` submenu is built dynamically at startup by fetching `GET /api/pets` from the sidecar. Each pet gets a `CheckMenuItem`; clicking it POSTs to `POST /api/pet/select` with the slug.
 
@@ -272,7 +276,7 @@ Set `HERMES_COMPANION_DEBUG=1` for verbose logging. Scoped prefixes:
 ## Out of Scope
 
 - Pet rendering inside the browser (WebUI)
-- Mobile/tablet support — desktop only (Windows first)
+- Mobile/tablet support — desktop only
 - Pet skin creation or management — `hermes pets` CLI handles this
 - Replacing the Desktop Companion extension
 - Packaging/deployment/signing — MVP is dev-mode only
@@ -285,6 +289,6 @@ Set `HERMES_COMPANION_DEBUG=1` for verbose logging. Scoped prefixes:
 
 - The petdex ecosystem is an open standard — 3278+ pets available. By consuming the standard format directly, we avoid vendor lock-in.
 - The WSL sidecar pattern (`localhost` port forwarding) is automatic — no firewall rules needed for localhost.
-- Future: if Hermes Agent or WebUI ever runs natively on Windows, the sidecar becomes unnecessary — the renderer can read `~/.hermes/pets/` directly.
+- Future: if Hermes Agent or WebUI ever runs natively on the host OS, the sidecar becomes unnecessary — the renderer can read `~/.hermes/pets/` directly.
 - Tauri v2 requires `withGlobalTauri: true` in `tauri.conf.json` to expose `__TAURI__` as a global. Without this, Tauri IPC silently fails and `invoke()` is unavailable to frontend JavaScript.
 - Pre-commit hooks and CI both use `--locked` to ensure reproducible builds from the committed `Cargo.lock`.

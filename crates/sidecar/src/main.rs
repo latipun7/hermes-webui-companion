@@ -1,8 +1,8 @@
-//! hermes-webui-companion-sidecar — Tiny HTTP bridge between WSL filesystem and Windows host.
+//! hermes-webui-companion-sidecar — Tiny HTTP bridge between WSL filesystem and host OS.
 //!
 //! Serves Hermes pet configuration and spritesheet assets via localhost,
-//! so the Tauri renderer on the Windows host can access them without
-//! fragile `\\wsl$` path hacks.
+//! so the Tauri renderer on the host OS can access them without
+//! fragile filesystem path hacks.
 
 use axum::{
     Json, Router,
