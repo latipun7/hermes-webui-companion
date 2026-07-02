@@ -98,7 +98,11 @@ mod tests {
     use super::*;
     use std::io::{Read, Write};
     use std::net::{Shutdown, TcpListener};
+    use std::sync::{LazyLock, Mutex};
     use std::thread;
+
+    /// Serialise tests that manipulate `HERMES_WEBUI_PORT` env var.
+    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     /// Start a tiny HTTP server on a random port that responds once then shuts down.
     fn serve_once(status: u16, body: &str) -> u16 {
@@ -131,6 +135,7 @@ mod tests {
 
     #[test]
     fn webui_health_returns_true_on_status_ok() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let port = serve_once(200, r#"{"status":"ok","sessions":0}"#);
         with_webui_port(port);
         assert!(check_webui_health());
@@ -138,6 +143,7 @@ mod tests {
 
     #[test]
     fn webui_health_accepts_ok_true_format() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let port = serve_once(200, r#"{"ok":true}"#);
         with_webui_port(port);
         assert!(check_webui_health());
@@ -145,6 +151,7 @@ mod tests {
 
     #[test]
     fn webui_health_returns_false_on_status_not_ok() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let port = serve_once(200, r#"{"status":"error"}"#);
         with_webui_port(port);
         assert!(!check_webui_health());
@@ -152,6 +159,7 @@ mod tests {
 
     #[test]
     fn webui_health_returns_false_on_404() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let port = serve_once(404, r#"{}"#);
         with_webui_port(port);
         assert!(!check_webui_health());
@@ -159,6 +167,7 @@ mod tests {
 
     #[test]
     fn webui_health_returns_false_on_bad_json() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let port = serve_once(200, "not json");
         with_webui_port(port);
         assert!(!check_webui_health());
@@ -166,6 +175,7 @@ mod tests {
 
     #[test]
     fn webui_health_returns_false_on_missing_status() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let port = serve_once(200, r#"{"uptime":123}"#);
         with_webui_port(port);
         assert!(!check_webui_health());
