@@ -35,10 +35,10 @@ jobs:
           path: |
             ~/.cargo/
             target/
-          key: cargo-sidecar-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            cargo-sidecar-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-            cargo-sidecar-${{ runner.os }}-
+            cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+            cargo-${{ runner.os }}-
 
       - name: 🛠️ Build
         run: cargo build --locked --release -p hermes-webui-companion-sidecar
@@ -101,10 +101,10 @@ jobs:
           path: |
             ~/.cargo/
             target/
-          key: cargo-renderer-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            cargo-renderer-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-            cargo-renderer-${{ matrix.target }}-
+            cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+            cargo-${{ runner.os }}-
 
       - name: 🛠️ Tauri Build
         run: npx --yes @tauri-apps/cli@latest build --features gui
@@ -118,8 +118,8 @@ jobs:
           PREFIX="hermes-webui-companion-renderer-${{ matrix.target }}"
           cp "target/release/hermes-webui-companion-gui" "staging/${PREFIX}"
           chmod +x "staging/${PREFIX}"
-          if ls target/release/bundle/*/ 2>/dev/null; then
-            cp -r target/release/bundle/*/* "staging/" 2>/dev/null || true
+          if [ -d target/release/bundle ]; then
+            find target/release/bundle -type f -exec cp {} staging/ \;
           fi
 
       - name: 📁 Stage (Windows)
@@ -129,8 +129,8 @@ jobs:
           mkdir staging -Force
           $prefix = "hermes-webui-companion-renderer-${{ matrix.target }}"
           Copy-Item "target/release/hermes-webui-companion-gui.exe" "staging/${prefix}.exe"
-          if (Test-Path "target/release/bundle/*/") {
-            Get-ChildItem "target/release/bundle/*/*" | Copy-Item -Destination staging
+          if (Test-Path "target/release/bundle") {
+            Get-ChildItem -Recurse -File "target/release/bundle" | Copy-Item -Destination staging
           }
 
       - name: ⬆️ Upload
