@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicepkg/vscode-tauri/main/schemas/config.schema.json",
-  "productName": "Hermes Companion",
+  "productName": "Hermes WebUI Companion",
   "version": "0.1.0",
   "identifier": "dev.latipun7.hermes-webui-companion",
   "build": {
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Hermes Companion",
+        "title": "Hermes WebUI Companion",
         "url": "index.html",
         "width": 172,
         "height": 186,

@@ -1,4 +1,4 @@
-// bubbles.js — Light-themed bubble card for Hermes Companion
+// bubbles.js — Light-themed bubble card for Hermes WebUI Companion
 //
 // Polls the bridge server for companion state and renders
 // a card notification above the pet. Click opens the session
