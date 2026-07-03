@@ -89,15 +89,15 @@ pub struct StateResponse {
 }
 
 impl StateResponse {
-    /// Build a response from the snapshot and sidecar health flag.
+    /// Build a response from the snapshot and the combined health flag.
     ///
-    /// The `sidecar_healthy` flag comes from the health-check thread and
-    /// overrides any snapshot state when the sidecar is unreachable.
-    pub fn from_snapshot(snap: &CompanionSnapshot, sidecar_healthy: bool) -> Self {
+    /// The `all_healthy` flag comes from the health-check thread and
+    /// overrides any snapshot state when either WebUI or pet data is unavailable.
+    pub fn from_snapshot(snap: &CompanionSnapshot, all_healthy: bool) -> Self {
         Self {
             state: snap.state.clone(),
             attention: snap.attention.clone(),
-            resolved_animation: resolve_animation_state(snap, sidecar_healthy).as_str().to_string(),
+            resolved_animation: resolve_animation_state(snap, all_healthy).as_str().to_string(),
         }
     }
 }
@@ -106,26 +106,23 @@ impl StateResponse {
 // State machine
 // ---------------------------------------------------------------------------
 
-/// Priority: sidecar down > Approval > Clarify > agent state.
+/// Priority: all_healthy > Approval > Clarify > companion state.
 ///
-/// When `sidecar_healthy` is `false`, always returns `Failed` regardless of
+/// When `all_healthy` is `false`, always returns `Failed` regardless of
 /// the snapshot content — this prevents race conditions where incoming WebUI
 /// snapshots overwrite a health-check-triggered Failed state.
 ///
-/// - `sidecar_healthy == false` → `Failed` (overrides everything)
+/// - `all_healthy == false` → `Failed` (overrides everything)
 /// - Any `Approval` attention item → `Waiting`
 /// - Any `Clarify` attention item → `Review`
 /// - `CompanionState::Running` → `Running`
 /// - `CompanionState::Ready` → `Waving`
 /// - `CompanionState::Idle` → `Idle`
-pub fn resolve_animation_state(
-    snapshot: &CompanionSnapshot,
-    sidecar_healthy: bool,
-) -> AnimationState {
-    // Sidecar health takes absolute highest priority.
+pub fn resolve_animation_state(snapshot: &CompanionSnapshot, all_healthy: bool) -> AnimationState {
+    // Combined health (WebUI + pet data) takes absolute highest priority.
     // This flag is set by the health-check thread; incoming WebUI snapshots
     // cannot override it, preventing a flicker loop (Failed → Ready → Failed).
-    if !sidecar_healthy {
+    if !all_healthy {
         return AnimationState::Failed;
     }
 
@@ -229,7 +226,7 @@ mod tests {
     #[test]
     fn failed_state_falls_through_when_healthy() {
         // When sidecar IS healthy, CompanionState::Failed does NOT override.
-        // Only !sidecar_healthy triggers the Failed animation.
+        // Only !all_healthy triggers the Failed animation.
         let snap = snapshot(
             CompanionState::Failed,
             vec![AttentionStatus::Approval, AttentionStatus::Clarify],

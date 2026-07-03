@@ -1,14 +1,14 @@
-//! Health checks — sidecar + WebUI — initial synchronous probe + background polling.
+//! Health checks — pet data provider + WebUI — initial synchronous probe + background polling.
 //!
 //! Sets an `AtomicBool` flag consumed by `resolve_animation_state()` so
 //! incoming WebUI snapshots cannot race the health check and cause a
-//! flicker loop. Both the sidecar (:17888) and WebUI (:8787 or
+//! flicker loop. Both the pet data provider and WebUI (:8787 or
 //! `HERMES_WEBUI_PORT`) must be healthy for the flag to be `true`.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use companion_renderer::sidecar_client::SidecarClient;
+use companion_renderer::PetDataProvider;
 
 use crate::debug;
 
@@ -39,18 +39,16 @@ pub(crate) fn check_webui_health() -> bool {
     }
 }
 
-/// Run initial synchronous health checks for both sidecar and WebUI,
+/// Run initial synchronous health checks for both the pet data provider and WebUI,
 /// then spawn a background thread that probes both every 10 seconds.
-/// Returns an `AtomicBool` that is `true` only when BOTH services are healthy.
-pub fn spawn_health_check() -> Arc<AtomicBool> {
-    let sidecar_client = SidecarClient::new("http://127.0.0.1:17888".into());
-
-    let sidecar_ok = sidecar_client.check_health();
+/// Returns an `AtomicBool` that is `true` only when BOTH are healthy.
+pub fn spawn_health_check(provider: Arc<dyn PetDataProvider + Send + Sync>) -> Arc<AtomicBool> {
+    let provider_ok = provider.is_available();
     let webui_ok = check_webui_health();
-    let initial_healthy = sidecar_ok && webui_ok;
+    let initial_healthy = provider_ok && webui_ok;
 
-    if !sidecar_ok {
-        debug!("[companion:health] sidecar unreachable at startup → Failed");
+    if !provider_ok {
+        debug!("[companion:health] pet data unavailable at startup → Failed");
     }
     if !webui_ok {
         debug!("[companion:health] webui unreachable at startup ({}) → Failed", webui_base_url());
@@ -64,14 +62,14 @@ pub fn spawn_health_check() -> Arc<AtomicBool> {
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(10));
 
-                let sidecar_ok = sidecar_client.check_health();
+                let provider_ok = provider.is_available();
                 let webui_ok = check_webui_health();
-                let healthy = sidecar_ok && webui_ok;
+                let healthy = provider_ok && webui_ok;
 
                 let was = all_healthy.swap(healthy, Ordering::SeqCst);
                 if !healthy && was {
-                    if !sidecar_ok {
-                        debug!("[companion:health] sidecar unreachable → Failed");
+                    if !provider_ok {
+                        debug!("[companion:health] pet data unavailable → Failed");
                     }
                     if !webui_ok {
                         debug!(

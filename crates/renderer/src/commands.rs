@@ -64,10 +64,10 @@ pub fn open_webui() {
 #[tauri::command]
 pub fn get_companion_state(
     state: tauri::State<'_, Arc<Mutex<CompanionSnapshot>>>,
-    sidecar_healthy: tauri::State<'_, Arc<AtomicBool>>,
+    all_healthy: tauri::State<'_, Arc<AtomicBool>>,
 ) -> Result<serde_json::Value, String> {
     let snap = state.lock().map_err(|e| e.to_string())?;
-    let healthy = sidecar_healthy.load(Ordering::SeqCst);
+    let healthy = all_healthy.load(Ordering::SeqCst);
     let resp = StateResponse::from_snapshot(&snap, healthy);
     serde_json::to_value(&resp).map_err(|e| e.to_string())
 }
