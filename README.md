@@ -35,8 +35,8 @@
 - **💬 Bubble Notifications** — A sleek overlay window shows session attention items, approvals, and clarify requests.
 - **🎮 Switch Pets Instantly** — Native right-click context menu (Tauri `popup_menu`) lets you switch pets without touching the terminal.
 - **🪟 Always-on-Top** — Transparent, draggable window that stays above everything else.
-- **🪶 Lightweight Sidecar** — A tiny Rust HTTP server (axum) inside WSL bridges the filesystem boundary — no Node.js, no Electron.
-- **🔄 Auto-Start** — Sidecar runs as a systemd user service in WSL, starts automatically with your system.
+- **🪶 Optional Sidecar** — When Hermes runs in WSL, a tiny Rust HTTP server (axum) bridges the filesystem boundary. Not needed when Hermes and the renderer share the same host.
+- **🔄 Auto-Start** — When using WSL, the sidecar runs as a systemd user service and starts automatically with your system.
 
 ## 🏗️ Architecture
 
@@ -68,10 +68,10 @@ flowchart LR
 
 The renderer auto-detects the mode at startup and stays in it for the session lifetime.
 
-| Component    | Where           | What it does                                      |
-| ------------ | --------------- | ------------------------------------------------- |
-| **Sidecar**  | WSL (systemd)   | Serves pet config & spritesheets from `~/.hermes` |
-| **Renderer** | Desktop (Tauri) | Renders the pet, shows bubbles, handles state     |
+| Component    | Required?         | What it does                                      |
+| ------------ | ----------------- | ------------------------------------------------- |
+| **Renderer** | Always            | Renders the pet, shows bubbles, handles state     |
+| **Sidecar**  | WSL / remote only | Bridges `~/.hermes/` from WSL to the host via HTTP |
 
 ## ⚡ Quick Start
 
@@ -79,9 +79,11 @@ The renderer auto-detects the mode at startup and stays in it for the session li
 
 - **Tauri runtime** — [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) on Windows, webkit2gtk on Linux, built-in WebKit on macOS
 - **Hermes Agent** with [petdex](https://petdex.dev) pet installed (`hermes pets install <slug>`)
-- **WSL** with Hermes WebUI running
+- **Hermes WebUI** running and accessible at `localhost:8787` — either on the same host (direct mode) or inside WSL (sidecar mode)
 
-### 1. Install the Sidecar (WSL)
+### 1. Install the Sidecar (optional — only for WSL / remote Hermes)
+
+If Hermes runs inside WSL or on a different machine, install the sidecar to bridge the filesystem boundary. Skip this step if Hermes and the renderer share the same host — direct mode handles that automatically.
 
 ```bash
 # Download the latest sidecar binary and service file
@@ -140,16 +142,20 @@ webui-companion/
     └── adr/                 # Architecture decisions
 ```
 
-### Local Setup (WSL)
+### Local Setup (WSL / Linux)
+
+> Sidecar build is optional — only needed if you plan to run Hermes in WSL.
 
 ```bash
 # Install system dependencies (for Tauri on Linux)
 sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev \
   libayatana-appindicator3-dev librsvg2-dev
 
-# Clone and build
+# Clone the repo
 git clone https://github.com/latipun7/hermes-webui-companion.git
 cd hermes-webui-companion
+
+# Build the sidecar (optional — WSL mode only)
 cargo build --release -p hermes-webui-companion-sidecar
 
 # Run tests
@@ -176,7 +182,7 @@ This project enforces:
 
 ## 🏗️ Building from Source
 
-### Sidecar (any platform)
+### Sidecar (optional — WSL mode only)
 
 ```bash
 cargo build --locked --release -p hermes-webui-companion-sidecar
@@ -200,8 +206,9 @@ git push origin v0.1.0
 
 | Environment Variable     | Default | Description                    |
 | ------------------------ | ------- | ------------------------------ |
-| `HERMES_COMPANION_DEBUG` | —       | Set to `1` for verbose logging |
+| `HERMES_HOME`            | (auto)  | Override Hermes installation path (direct mode) |
 | `HERMES_WEBUI_PORT`      | `8787`  | WebUI health check port        |
+| `HERMES_COMPANION_DEBUG` | —       | Set to `1` for verbose logging |
 | `CARGO_TARGET_DIR`       | —       | Custom build output directory  |
 
 Debug logging gives you scoped prefixes:
