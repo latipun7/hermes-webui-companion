@@ -6,6 +6,7 @@
 pub mod animation;
 pub mod bridge;
 pub mod bridge_server;
+pub mod direct_client;
 pub mod sidecar_client;
 pub mod sprite;
 
