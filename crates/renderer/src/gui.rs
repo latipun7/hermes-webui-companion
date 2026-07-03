@@ -1,8 +1,8 @@
 //! Tauri GUI binary for the desktop companion renderer.
 //!
-//! Thin orchestrator — wires together the bridge server, sidecar health check,
-//! bubble tracking, Tauri commands, and window event handlers. All heavy logic
-//! lives in sibling modules.
+//! Thin orchestrator — wires together the bridge server, pet data provider,
+//! health check, bubble tracking, Tauri commands, and window event handlers.
+//! All heavy logic lives in sibling modules.
 
 #![windows_subsystem = "windows"]
 
@@ -14,13 +14,29 @@ mod health;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 
+use companion_renderer::PetDataProvider;
 use companion_renderer::animation::{CompanionSnapshot, CompanionState};
 use companion_renderer::bridge_server::{self, BridgeState};
+use companion_renderer::direct_client::DirectClient;
+use companion_renderer::sidecar_client::SidecarClient;
 use tauri::Manager;
 
 use crate::bubble::{reposition_bubble, spawn_bubble_visibility_poller};
 use crate::debug::{ASPECT_RATIO, debug};
 use crate::health::spawn_health_check;
+
+/// Auto-detect which pet data source to use: DirectClient if HERMES_HOME is
+/// readable, otherwise SidecarClient (WSL).
+fn detect_provider() -> Arc<dyn PetDataProvider + Send + Sync> {
+    let direct = DirectClient::new(None);
+    if direct.is_available() {
+        debug!("[companion] direct mode — reading from {:?}", DirectClient::default_hermes_home());
+        Arc::new(direct)
+    } else {
+        debug!("[companion] sidecar mode — connecting to :17888");
+        Arc::new(SidecarClient::new("http://127.0.0.1:17888".into()))
+    }
+}
 
 fn main() {
     // ── Shared state ──────────────────────────────────────────
@@ -31,7 +47,11 @@ fn main() {
     let nav_command: Arc<Mutex<Option<bridge_server::NavigationCommand>>> =
         Arc::new(Mutex::new(None));
     let bubbles_visible = Arc::new(AtomicBool::new(true));
-    let sidecar_healthy = spawn_health_check();
+
+    // Auto-detect mode and instantiate the pet data provider
+    let provider = detect_provider();
+    let all_healthy = spawn_health_check(provider.clone());
+
     let drag_dx = Arc::new(AtomicI32::new(0));
     let last_pos: Arc<Mutex<(i32, i32)>> = Arc::new(Mutex::new((0, 0)));
 
@@ -39,7 +59,8 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .manage(companion_state.clone())
-        .manage(sidecar_healthy.clone())
+        .manage(all_healthy.clone())
+        .manage(provider.clone())
         .manage(drag_dx.clone())
         .invoke_handler(tauri::generate_handler![
             commands::get_active_pet,
@@ -73,7 +94,7 @@ fn main() {
                 snapshot: companion_state,
                 navigation: nav_command,
                 bubbles_visible: bubbles_visible.clone(),
-                sidecar_healthy: sidecar_healthy.clone(),
+                all_healthy: all_healthy.clone(),
             });
 
             // Windows

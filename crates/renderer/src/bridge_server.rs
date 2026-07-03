@@ -47,7 +47,7 @@ pub struct BridgeState {
     pub snapshot: Arc<Mutex<CompanionSnapshot>>,
     pub navigation: Arc<Mutex<Option<NavigationCommand>>>,
     pub bubbles_visible: Arc<AtomicBool>,
-    pub sidecar_healthy: Arc<AtomicBool>,
+    pub all_healthy: Arc<AtomicBool>,
 }
 
 /// Minimal HTTP response for handler testing.
@@ -83,12 +83,9 @@ fn handle_health() -> HttpResponse {
 }
 
 #[cfg(feature = "gui")]
-fn handle_get_state(
-    snapshot: &Mutex<CompanionSnapshot>,
-    sidecar_healthy: &AtomicBool,
-) -> HttpResponse {
+fn handle_get_state(snapshot: &Mutex<CompanionSnapshot>, all_healthy: &AtomicBool) -> HttpResponse {
     let body = if let Ok(guard) = snapshot.lock() {
-        let healthy = sidecar_healthy.load(Ordering::SeqCst);
+        let healthy = all_healthy.load(Ordering::SeqCst);
         let resp = StateResponse::from_snapshot(&guard, healthy);
         serde_json::to_string(&resp).unwrap_or_else(|_| "{}".into())
     } else {
@@ -221,18 +218,13 @@ pub fn spawn_bridge_server(state: BridgeState) {
     let snapshot = state.snapshot;
     let navigation = state.navigation;
     let bubbles_visible = state.bubbles_visible;
-    let sidecar_healthy = state.sidecar_healthy;
+    let all_healthy = state.all_healthy;
 
     std::thread::spawn(move || {
         debug!("[companion:bridge] server listening on 127.0.0.1:17787");
         for mut request in server.incoming_requests() {
-            let response = route_request(
-                &mut request,
-                &snapshot,
-                &navigation,
-                &bubbles_visible,
-                &sidecar_healthy,
-            );
+            let response =
+                route_request(&mut request, &snapshot, &navigation, &bubbles_visible, &all_healthy);
             let _ = request.respond(response);
         }
     });
@@ -244,7 +236,7 @@ fn route_request(
     snapshot: &Mutex<CompanionSnapshot>,
     navigation: &Mutex<Option<NavigationCommand>>,
     bubbles_visible: &AtomicBool,
-    sidecar_healthy: &AtomicBool,
+    all_healthy: &AtomicBool,
 ) -> tiny_http::Response<std::io::Cursor<Vec<u8>>> {
     use tiny_http::{Header, Method, Response, StatusCode};
     let method = req.method();
@@ -256,7 +248,7 @@ fn route_request(
         (Method::Get, "/health") | (Method::Get, "/health/") => handle_health(),
 
         (Method::Get, "/api/state") | (Method::Get, "/api/state/") => {
-            handle_get_state(snapshot, sidecar_healthy)
+            handle_get_state(snapshot, all_healthy)
         },
 
         (Method::Get, "/api/bubbles/visible") => handle_get_bubbles_visible(bubbles_visible),

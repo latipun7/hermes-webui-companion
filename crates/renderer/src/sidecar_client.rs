@@ -6,6 +6,23 @@
 use serde::Deserialize;
 
 // ---------------------------------------------------------------------------
+// PetDataProvider trait — unified interface for pet data access
+// ---------------------------------------------------------------------------
+
+/// Trait for providing pet data to the renderer.
+///
+/// Implemented by `SidecarClient` (HTTP to sidecar) and `DirectClient`
+/// (filesystem reads) so call sites are agnostic to the data source.
+pub trait PetDataProvider {
+    fn fetch_active_pet(&self) -> Result<ActivePetResponse, SidecarError>;
+    fn fetch_spritesheet(&self, slug: &str) -> Result<Vec<u8>, SidecarError>;
+    fn fetch_pets(&self) -> Result<PetListResponse, SidecarError>;
+    fn select_pet(&self, slug: &str) -> Result<SelectPetResponse, SidecarError>;
+    /// Whether the data source is currently available.
+    fn is_available(&self) -> bool;
+}
+
+// ---------------------------------------------------------------------------
 // Response types
 // ---------------------------------------------------------------------------
 
@@ -178,6 +195,28 @@ impl SidecarClient {
                 .read_json::<SidecarError>()
                 .unwrap_or(SidecarError { error: format!("unexpected status: {}", status) }))
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// PetDataProvider implementation for SidecarClient
+// ---------------------------------------------------------------------------
+
+impl PetDataProvider for SidecarClient {
+    fn fetch_active_pet(&self) -> Result<ActivePetResponse, SidecarError> {
+        SidecarClient::fetch_active_pet(self)
+    }
+    fn fetch_spritesheet(&self, slug: &str) -> Result<Vec<u8>, SidecarError> {
+        SidecarClient::fetch_spritesheet(self, slug)
+    }
+    fn fetch_pets(&self) -> Result<PetListResponse, SidecarError> {
+        SidecarClient::fetch_pets(self)
+    }
+    fn select_pet(&self, slug: &str) -> Result<SelectPetResponse, SidecarError> {
+        SidecarClient::select_pet(self, slug)
+    }
+    fn is_available(&self) -> bool {
+        self.check_health()
     }
 }
 

@@ -40,39 +40,33 @@
 
 ## 🏗️ Architecture
 
-```
-┌─ Host OS ───────────────────────────────────────────────────┐
-│                                                             │
-│  Hermes WebUI Companion (Tauri v2)                          │
-│  ├─ Bridge server (:17787) ← receives WebUI snapshots       │
-│  ├─ Animation engine — centralized priority logic           │
-│  ├─ CSS sprite renderer — transparent, always-on-top        │
-│  ├─ Bubble overlay — notification cards                     │
-│  ├─ Right-click menu — Restart, Close, Switch pet           │
-│  └─ SidecarClient — fetches pet data via HTTP               │
-│         │                                                   │
-│    HTTP fetch          HTTP POST                            │
-│         │               │                                   │
-│  ┌─ WSL ───────────────────────────┐                        │
-│  │                                 │                        │
-│  │  Sidecar (:17888)               │                        │
-│  │  ├─ /health                     │                        │
-│  │  ├─ /api/pet/active             │                        │
-│  │  ├─ /pets/{slug}/spritesheet    │                        │
-│  │  ├─ /api/pets                   │                        │
-│  │  └─ /api/pet/select             │                        │
-│  │                                 │                        │
-│  │  ~/.hermes/config.yaml          │                        │
-│  │  ~/.hermes/pets/<slug>/         │                        │
-│  │                                 │                        │
-│  │  Hermes WebUI (:8787)           │                        │
-│  │  └─ companion-adapter.js        │                        │
-│  │       → POST snapshots to :17787│                        │
-│  └─────────────────────────────────┘                        │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    WEBUI["🧠 Hermes WebUI<br>:8787"] -->|"session snapshots"| BRIDGE
+
+    subgraph COMPANION["🦀 Hermes WebUI Companion"]
+        BRIDGE["Bridge :17787"]
+        ANIM["Animation Engine"]
+        PROVIDER["PetDataProvider"]
+        WINDOW["Desktop Pet<br>+ Bubbles + Menu"]
+    end
+
+    DIRECT["📁 ~/.hermes/<br>direct mode"] -->|"filesystem"| PROVIDER
+    SIDECAR["🔗 Sidecar :17888<br>sidecar mode"] -->|"HTTP"| PROVIDER
+
+    BRIDGE --> ANIM
+    PROVIDER --> ANIM
+    ANIM --> WINDOW
 ```
 
-### Two Components
+### Two Modes
+
+| Mode | When | How |
+|------|------|-----|
+| **Direct** | Hermes & renderer on same host | Reads `~/.hermes/` directly via filesystem |
+| **Sidecar** | Hermes in WSL, renderer on host | HTTP to sidecar at `:17888` (bridges WSL boundary) |
+
+The renderer auto-detects the mode at startup and stays in it for the session lifetime.
 
 | Component    | Where           | What it does                                      |
 | ------------ | --------------- | ------------------------------------------------- |

@@ -21,23 +21,35 @@ Feature-specific glossaries in `docs/glossary-*.md` are derived snapshots — th
 
 | Term | Definition |
 |------|-----------|
-| **Sidecar** | The `hermes-webui-companion-sidecar` binary running inside WSL. An HTTP server (axum, `:17888`) that bridges the WSL filesystem boundary — reads `~/.hermes/pets/` and `~/.hermes/config.yaml`, serves pet data and spritesheets to the renderer via `localhost`. |
-| **Renderer** | The `hermes-webui-companion-renderer` binary. A cross-platform Tauri v2 desktop app. Fetches pet data from the sidecar, renders the animated sprite window, listens for WebUI state snapshots, and shows bubble notifications. |
+| **Sidecar** | The `hermes-webui-companion-sidecar` binary running inside WSL. An HTTP server (axum, `:17888`) that bridges the WSL filesystem boundary — reads `~/.hermes/pets/` and `~/.hermes/config.yaml`, serves pet data and spritesheets to the renderer via `localhost`. Not needed when Hermes and the renderer run on the same host (see **Direct Mode**). |
+| **Renderer** | The `hermes-webui-companion-renderer` binary. A cross-platform Tauri v2 desktop app. Fetches pet data from the sidecar (or directly from filesystem in **Direct Mode**), renders the animated sprite window, listens for WebUI state snapshots, and shows bubble notifications. |
 | **Bridge Server** | The HTTP server inside the renderer (`tiny_http`, `:17787`). Receives state snapshots from the WebUI companion-adapter.js. Sometimes called just "bridge" — same thing. |
 | **Bridge Protocol** | The JSON-over-HTTP contract between the WebUI companion-adapter.js and the renderer's bridge server. Defines the `WebuiSnapshot` shape with `companion.state` and `companion.attention[]`. |
-| **SidecarClient** | The HTTP client inside the renderer (`ureq`). All communication with the sidecar flows through this module. Handles health checks, fetching pet data, and pet selection. |
+| **SidecarClient** | The HTTP client inside the renderer (`ureq`). Implements `PetDataProvider` for sidecar mode — fetches pet data, health checks, and selection via the sidecar's HTTP API. |
 | **Companion Adapter** | The `companion-adapter.js` script inside Hermes WebUI (`:8787`). Monitors WebUI session state and POSTs snapshots to the renderer's bridge server. NOT part of this project — it's an external dependency. |
+| **PetDataProvider** | Trait defining the interface for all pet data access: `fetch_active_pet()`, `fetch_spritesheet()`, `fetch_pets()`, `select_pet()`, `is_available()`. Implemented by `SidecarClient` (HTTP) and `DirectClient` (filesystem). Allows the renderer to swap data sources without changing its call sites. |
+| **DirectClient** | Implements `PetDataProvider` by reading `~/.hermes/pets/` and `~/.hermes/config.yaml` directly from the local filesystem. Used in **Direct Mode** when the renderer and Hermes share the same host. `is_available()` checks filesystem readability. |
+| **Direct Mode** | Operating mode where the renderer reads pet data from the local filesystem instead of the sidecar. Detected at startup: if `$HERMES_HOME/config.yaml` is readable, use `DirectClient`; otherwise fall back to `SidecarClient` (sidecar mode). Mode is static for the process lifetime. |
+| **HERMES_HOME** | Environment variable overriding the default Hermes installation path. Defaults: `~/.hermes` (Linux/macOS), `%LOCALAPPDATA%\hermes\` (Windows). Used in direct mode to locate `config.yaml` and `pets/`.
 
 ## State Machine
 
 | Term | Definition |
 |------|-----------|
-| **Companion State** | The overall WebUI agent activity level as reported by the companion adapter: `idle`, `running`, `ready`, `failed`. Note: `Failed` in CompanionState means "sidecar unreachable" — distinct from the WebUI snapshot's own state. |
+| **Companion State** | The overall WebUI agent activity level as reported by the companion adapter: `idle`, `running`, `ready`. |
 | **Attention Item** | A single session that needs user attention. Has a `status` (`Approval`, `Clarify`, `Running`, `Ready`), optional `text` (message preview), and optional `session_id` for linking back to WebUI. |
 | **Attention Status** | The specific type of attention: `Approval` (pending user approval), `Clarify` (pending user clarification), `Running` (session actively processing), `Ready` (session completed). |
 | **Animation State** | The resolved animation playing on the pet sprite. One of: `Idle`, `Running`, `RunningRight`, `RunningLeft`, `Waving`, `Jumping`, `Failed`, `Waiting`, `Review`. This is the OUTPUT of the priority resolver — frontends receive `resolved_animation` and never re-compute priority. |
-| **Resolved Animation** | The `resolved_animation` string field in `StateResponse`. Computed by `resolve_animation_state()` with this priority chain: **sidecar down → Approval → Clarify → agent state**. Centralized in Rust so no priority logic lives in JavaScript. |
-| **Sidecar Healthy** | An `AtomicBool` flag tracking whether the sidecar's `/health` endpoint returns `{"ok":true}`. When `false`, all animation resolves to `Failed` regardless of incoming snapshots — prevents race-condition flicker. |
+| **Resolved Animation** | The `resolved_animation` string field in `StateResponse`. Computed by `resolve_animation_state()` with this priority chain: **WebUI down or pet data unavailable → Approval → Clarify → companion state**. Centralized in Rust so no priority logic lives in JavaScript. |
+| **WebUI Healthy** | An `AtomicBool` flag tracking whether the WebUI health endpoint (`:8787/health`) is reachable. When `false`, all animation resolves to `Failed` regardless of incoming snapshots. Replaces the old `sidecar_healthy` flag. |
+| **Pet Data Available** | An `AtomicBool` flag set via `PetDataProvider::is_available()`. In sidecar mode: checks sidecar `/health`. In direct mode: checks filesystem readability. When `false` and `webui_healthy` is `true`, renderer shows the pet in `Failed` animation. |
+
+## Modes
+
+| Term | Definition |
+|------|-----------|
+| **Sidecar Mode** | Mode where the renderer connects to the sidecar at `:17888` for all pet data. Used when Hermes runs in WSL and the renderer runs on the host OS. `PetDataProvider` = `SidecarClient`. |
+| **Direct Mode** | Mode where the renderer reads pet data directly from `$HERMES_HOME`. Used when Hermes and the renderer run on the same host. `PetDataProvider` = `DirectClient`. No sidecar needed. |
 
 ## Window & UI
 
@@ -54,7 +66,7 @@ Feature-specific glossaries in `docs/glossary-*.md` are derived snapshots — th
 
 | Term | Definition |
 |------|-----------|
-| **Switch Pet** | Changing the active pet to a different installed one. Triggers `POST /api/pet/select` on the sidecar (which runs `hermes pets select <slug>`), then fetches the new spritesheet and reloads in-place without restarting the Tauri process. |
+| **Switch Pet** | Changing the active pet to a different installed one. In sidecar mode: triggers `POST /api/pet/select` on the sidecar. In direct mode: runs `hermes pets select <slug>` via subprocess (PATH → venv fallback). In both modes, fetches the new spritesheet and reloads in-place without restarting. |
 | **Heavy Restart** | Killing and re-launching the entire Tauri process via `tauri-plugin-process::restart()`. Used by "Restart pet" menu item. Resets all state: reconnects to sidecar, re-fetches pet data, restarts animations. |
 | **Close** | Terminating the Tauri application via `app_handle.exit(0)`. Kills both pet window and bubble window atomically. |
 | **Bubble Mute** | Hiding the bubble and suppressing state-driven animation changes. Set via the bubble toggle. Animation stays idle until the companion state actually changes (not just re-polled with same value). |
@@ -76,5 +88,14 @@ Feature-specific glossaries in `docs/glossary-*.md` are derived snapshots — th
 | `GET /api/pets` | Sidecar | Lists all installed pets with display names + marks the active one |
 | `POST /api/pet/select` | Sidecar | Runs `hermes pets select <slug>` to change the active pet |
 | `GET /pets/{slug}/spritesheet.webp` | Sidecar | Serves the spritesheet file for a given pet slug |
+| `GET /health` | WebUI (`:8787`) | Health check — returns `{"status":"ok"}` if WebUI is operational |
 | `POST /` | Bridge Server (`:17787`) | Receives WebUI companion snapshots from the companion-adapter.js |
 | `GET /api/state` | Bridge Server | Returns the current resolved animation state to the frontend |
+
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HERMES_HOME` | `~/.hermes` (Linux/macOS), `%LOCALAPPDATA%\hermes\` (Windows) | Hermes installation path. Used in direct mode to find `config.yaml` and `pets/`. |
+| `HERMES_WEBUI_PORT` | `8787` | WebUI server port. Renderer health-checks this port to set `webui_healthy`. |
+| `HERMES_COMPANION_DEBUG` | — | Set to `1` for verbose debug logging. |

@@ -37,49 +37,39 @@ The spritesheet format is the Codex Pet standard — 192×208px frames in an 8×
 
 ## Architecture
 
-```
-┌─ Windows Host ────────────────────────────────────────────┐
-│                                                           │
-│  🦀 hermes-webui-companion-renderer (Tauri v2)            │
-│  ├─ Animation state machine (centralized in Rust)         │
-│  ├─ CSS sprite renderer (transparent window)              │
-│  ├─ Bubble overlay (notifications, separate window)       │
-│  ├─ Right-click context menu (Restart, Close, Switch pet) │
-│  ├─ Bridge server (tiny_http, :17787)                     │
-│  └─ SidecarClient (ureq → sidecar :17888)                 │
-│         │                 │                               │
-│         │ HTTP            │ HTTP                          │
-│         ▼                 ▼                               │
-│  ┌─ WSL ───────────────────────────────────────┐          │
-│  │                                             │          │
-│  │  🦀 hermes-webui-companion-sidecar (:17888) │          │
-│  │  ├─ GET /health → {"ok":true}               │          │
-│  │  ├─ GET /api/pet/active → {slug, url}       │          │
-│  │  ├─ GET /pets/{slug}/spritesheet.webp       │          │
-│  │  ├─ GET /api/pets → {pets[], active}        │          │
-│  │  └─ POST /api/pet/select → {ok, slug}       │          │
-│  │         │                                   │          │
-│  │         ▼                                   │          │
-│  │  ~/.hermes/config.yaml                      │          │
-│  │  ~/.hermes/pets/<slug>/spritesheet.webp     │          │
-│  │                                             │          │
-│  │  Hermes WebUI (:8787)                       │          │
-│  │  └─ companion-adapter.js                    │          │
-│  │       → POST snapshots to :17787            │          │
-│  └─────────────────────────────────────────────┘          │
-└───────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    WEBUI["Hermes WebUI :8787<br>companion-adapter.js"] -->|"POST snapshots"| BRIDGE
+
+    subgraph RENDERER["hermes-webui-companion-renderer (Tauri v2)"]
+        direction TB
+        BRIDGE["Bridge Server<br>tiny_http :17787"]
+        ANIM["Animation State Machine<br>resolve_animation_state()"]
+        PROVIDER["PetDataProvider trait"]
+        UI["Desktop Pet Window<br>+ Bubble Overlay<br>+ Context Menu"]
+    end
+
+    DIRECT["~/.hermes/pets/<br>+ config.yaml<br><i>direct mode</i>"] -->|"filesystem"| PROVIDER
+    SIDECAR["Sidecar :17888<br><i>sidecar mode</i>"] -->|"HTTP"| PROVIDER
+    SIDECAR -->|"reads"| DIRECT
+
+    BRIDGE --> ANIM
+    PROVIDER --> ANIM
+    ANIM --> UI
 ```
 
 ## User Stories
 
 1. As a Hermes user, I want to see my active Hermes pet rendered on my desktop.
 2. As a Hermes user, I want the pet to automatically match whatever pet I selected with `hermes pets select <slug>`.
-3. As a Hermes user, I want the pet to animate differently based on my Hermes session state — idle, running, waiting (pending approval), review (pending clarification), waving (session complete), and failed (sidecar unreachable).
+3. As a Hermes user, I want the pet to animate differently based on my Hermes session state — idle, running, waiting (pending approval), review (pending clarification), waving (session complete), and failed (WebUI or pet data unavailable).
 4. As a Hermes user, I want the pet window to be transparent and always-on-top.
 5. As a Hermes user, I want to see notification bubbles from the pet when sessions need attention.
 6. As a Hermes user running WSL, I want the pet renderer to work without manual filesystem path hacks.
 7. As a developer, I want the sidecar to auto-start with WSL as a systemd user service.
-8. As a first-time user, I want to install the pet renderer once and have it auto-detect my Hermes setup.
+8. As a first-time user, I want to install the pet renderer once and have it auto-detect my Hermes setup — using direct filesystem access when on the same host, or the sidecar when Hermes is in WSL.
+13. As a user running Hermes natively on my host OS (no WSL), I want the renderer to work without installing or running a sidecar.
+14. As a user, I want to override the Hermes installation path via `HERMES_HOME` environment variable when my setup uses a non-default location.
 9. As a user who switches pets frequently, I want the renderer to detect active pet changes (via `hermes pets select`) and reload the spritesheet in-place without restarting the Tauri process.
 10. As a user, I want to switch my active pet from the pet window's right-click menu without touching the terminal.
 11. As a developer, I want linting and formatting enforced before every commit so the codebase stays consistent.
@@ -289,6 +279,6 @@ Set `HERMES_COMPANION_DEBUG=1` for verbose logging. Scoped prefixes:
 
 - The petdex ecosystem is an open standard — 3278+ pets available. By consuming the standard format directly, we avoid vendor lock-in.
 - The WSL sidecar pattern (`localhost` port forwarding) is automatic — no firewall rules needed for localhost.
-- Future: if Hermes Agent or WebUI ever runs natively on the host OS, the sidecar becomes unnecessary — the renderer can read `~/.hermes/pets/` directly.
+- When Hermes and the renderer run on the same host, direct filesystem access eliminates the sidecar entirely. See ADR-0006.
 - Tauri v2 requires `withGlobalTauri: true` in `tauri.conf.json` to expose `__TAURI__` as a global. Without this, Tauri IPC silently fails and `invoke()` is unavailable to frontend JavaScript.
 - Pre-commit hooks and CI both use `--locked` to ensure reproducible builds from the committed `Cargo.lock`.
