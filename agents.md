@@ -8,29 +8,23 @@ that reacts to companion state in real-time.
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    WEBUI["WebUI :8787"] -->|snapshots| BRIDGE["Bridge :17787"]
+    
+    FS["~/.hermes/"] -->|direct| CLIENT["PetDataProvider"]
+    SC["Sidecar :17888"] -->|HTTP| CLIENT
+    SC -.-> FS
+
+    BRIDGE --> ANIM["Animation Engine"]
+    CLIENT --> ANIM
+    ANIM --> UI["Pet + Bubble Windows"]
 ```
-┌─ WSL ───────────────────────────────────────────────┐
-│  hermes-webui-companion-sidecar (:17888)            │
-│  → serves pet config + spritesheets                 │
-│  → reads ~/.hermes/config.yaml & ~/.hermes/pets/    │
-│                                                     │
-│  Hermes WebUI (:8787)                               │
-│  → companion-adapter.js POSTs snapshots to :17787   │
-└─────────────────────────────────────────────────────┘
-          │                        │
-    HTTP fetch              HTTP POST
-          │                        │
-┌─ Windows (Tauri v2) ─────────────────────────────────┐
-│  hermes-webui-companion-renderer                     │
-│  ├─ Bridge server (:17787, tiny_http)                │
-│  ├─ Animation engine (centralized in Rust)           │
-│  ├─ SidecarClient (ureq → sidecar :17888)            │
-│  ├─ CSS sprite renderer (zero-blink)                 │
-│  └─ State polling — 1s interval                      │
-│                                                      │
-│  Window: 172×186, transparent, always-on-top         │
-└──────────────────────────────────────────────────────┘
-```
+
+- **Direct mode**: renderer reads `~/.hermes/` via filesystem (same host)
+- **Sidecar mode**: renderer HTTP → sidecar → reads `~/.hermes/` (WSL → host bridge)
+- **Bridge server** (`:17787`, tiny_http): receives WebUI snapshots, independent of pet data source
+- Mode detected at startup, static for session lifetime
 
 ## Project Layout
 
