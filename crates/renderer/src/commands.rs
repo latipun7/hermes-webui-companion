@@ -6,17 +6,19 @@
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 
+use companion_renderer::PetDataProvider;
 use companion_renderer::animation::{CompanionSnapshot, StateResponse};
-use companion_renderer::sidecar_client::SidecarClient;
+use tauri::Manager;
 use tauri::menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 
 use crate::debug;
 
 #[tauri::command]
-pub fn get_active_pet() -> Result<serde_json::Value, String> {
+pub fn get_active_pet(
+    provider: tauri::State<'_, Arc<dyn PetDataProvider + Send + Sync>>,
+) -> Result<serde_json::Value, String> {
     debug!("[companion:cmd] get_active_pet");
-    let client = SidecarClient::new("http://127.0.0.1:17888".into());
-    let pet = client.fetch_active_pet().map_err(|e| {
+    let pet = provider.fetch_active_pet().map_err(|e| {
         debug!("[companion:cmd] get_active_pet failed: {}", e.error);
         e.error
     })?;
@@ -29,10 +31,12 @@ pub fn get_active_pet() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-pub fn get_spritesheet(slug: String) -> Result<Vec<u8>, String> {
+pub fn get_spritesheet(
+    slug: String,
+    provider: tauri::State<'_, Arc<dyn PetDataProvider + Send + Sync>>,
+) -> Result<Vec<u8>, String> {
     debug!("[companion:cmd] get_spritesheet slug={}", slug);
-    let client = SidecarClient::new("http://127.0.0.1:17888".into());
-    client.fetch_spritesheet(&slug).map_err(|e| {
+    provider.fetch_spritesheet(&slug).map_err(|e| {
         debug!("[companion:cmd] get_spritesheet failed: {}", e.error);
         e.error
     })
@@ -99,7 +103,7 @@ pub fn close_pet(app: tauri::AppHandle) {
     app.exit(0);
 }
 
-/// Restart the Tauri process, reloading the pet and reconnecting to sidecar.
+/// Restart the Tauri process, reloading the pet and reconnecting.
 #[tauri::command]
 pub fn restart_pet(app: tauri::AppHandle) {
     app.restart();
@@ -107,14 +111,14 @@ pub fn restart_pet(app: tauri::AppHandle) {
 
 /// Switch to a new pet — called from on_menu_event when user clicks a pet in the submenu.
 /// This is NOT a #[tauri::command] (called internally from gui.rs menu handler).
-pub fn switch_pet_inner(_app: tauri::AppHandle, slug: String) -> Result<(), String> {
-    let client = SidecarClient::new("http://127.0.0.1:17888".into());
+pub fn switch_pet_inner(app: tauri::AppHandle, slug: String) -> Result<(), String> {
+    let provider = app.state::<Arc<dyn PetDataProvider + Send + Sync>>();
 
-    // 1. Select the new pet via sidecar (runs hermes pets select)
-    client.select_pet(&slug).map_err(|e| e.error)?;
+    // 1. Select the new pet via provider (hermes CLI or sidecar)
+    provider.select_pet(&slug).map_err(|e| e.error)?;
 
     // 2. Verify the spritesheet is fetchable (preload check)
-    client.fetch_spritesheet(&slug).map_err(|e| e.error)?;
+    provider.fetch_spritesheet(&slug).map_err(|e| e.error)?;
 
     // Frontend will detect the slug change on next poll and reload in-place.
     // No app restart needed — see ADR-003.
@@ -128,14 +132,14 @@ fn build_context_menu(
     let restart = MenuItemBuilder::with_id("restart", "Restart pet").build(app)?;
     let close = MenuItemBuilder::with_id("close", "Close pet").build(app)?;
 
-    // Build Switch pet submenu from sidecar
-    let switch_submenu = build_switch_submenu(app);
+    let provider = app.state::<Arc<dyn PetDataProvider + Send + Sync>>();
+    let switch_submenu = build_switch_submenu(app, &**provider);
 
     let mut menu_builder = MenuBuilder::new(app);
     if let Ok(submenu) = switch_submenu {
         menu_builder = menu_builder.item(&submenu);
     } else {
-        // Sidecar unreachable — show disabled placeholder
+        // Provider unreachable — show disabled placeholder
         let disabled = MenuItemBuilder::with_id("switch_unavailable", "Switch pet (unavailable)")
             .enabled(false)
             .build(app)?;
@@ -144,14 +148,14 @@ fn build_context_menu(
     menu_builder.separator().item(&restart).item(&close).build()
 }
 
-/// Build the Switch pet submenu by fetching installed pets from the sidecar.
+/// Build the Switch pet submenu by fetching installed pets from the provider.
 fn build_switch_submenu(
     app: &tauri::AppHandle,
+    provider: &(dyn PetDataProvider + Send + Sync),
 ) -> Result<tauri::menu::Submenu<tauri::Wry>, tauri::Error> {
-    let client = SidecarClient::new("http://127.0.0.1:17888".into());
-    let pet_list = client
+    let pet_list = provider
         .fetch_pets()
-        .map_err(|_| tauri::Error::from(std::io::Error::other("sidecar unreachable")))?;
+        .map_err(|_| tauri::Error::from(std::io::Error::other("provider unreachable")))?;
 
     let mut submenu = SubmenuBuilder::new(app, "Switch pet");
     for pet in &pet_list.pets {

@@ -60,6 +60,7 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .manage(companion_state.clone())
         .manage(all_healthy.clone())
+        .manage(provider.clone())
         .manage(drag_dx.clone())
         .invoke_handler(tauri::generate_handler![
             commands::get_active_pet,
