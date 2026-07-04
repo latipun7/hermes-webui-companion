@@ -132,6 +132,7 @@ webui-companion/
 ├── context.md               # Domain glossary (canonical terminology)
 ├── .githooks/pre-commit     # Enforced linting & formatting
 ├── crates/
+│   ├── common/               # Shared types + ConfigReader
 │   ├── sidecar/             # WSL HTTP server (axum)
 │   └── renderer/            # Desktop app (Tauri v2)
 │       ├── src/             # Rust modules

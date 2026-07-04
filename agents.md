@@ -40,8 +40,9 @@ webui-companion/
 │   ├── adr/                 # architecture decisions
 │   └── hermes-webui-companion-sidecar.service
 ├── crates/
+│   ├── common/             # shared types + ConfigReader
 │   ├── sidecar/            # axum HTTP server (WSL)
-│   └── renderer/           # Tauri v2 app (Windows)
+│   └── renderer/           # Tauri v2 app (cross-platform)
 │       ├── src/            # Rust — animation, bridge, sidecar_client, sprite
 │       └── gui/            # Frontend — vanilla HTML/CSS/JS, no npm
 ```

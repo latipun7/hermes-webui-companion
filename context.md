@@ -30,7 +30,8 @@ Feature-specific glossaries in `docs/glossary-*.md` are derived snapshots — th
 | **PetDataProvider** | Trait defining the interface for all pet data access: `fetch_active_pet()`, `fetch_spritesheet()`, `fetch_pets()`, `select_pet()`, `is_available()`. Implemented by `SidecarClient` (HTTP) and `DirectClient` (filesystem). Allows the renderer to swap data sources without changing its call sites. |
 | **DirectClient** | Implements `PetDataProvider` by reading `~/.hermes/pets/` and `~/.hermes/config.yaml` directly from the local filesystem. Used in **Direct Mode** when the renderer and Hermes share the same host. `is_available()` checks filesystem readability. |
 | **Direct Mode** | Operating mode where the renderer reads pet data from the local filesystem instead of the sidecar. Detected at startup: if `$HERMES_HOME/config.yaml` is readable, use `DirectClient`; otherwise fall back to `SidecarClient` (sidecar mode). Mode is static for the process lifetime. |
-| **HERMES_HOME** | Environment variable overriding the default Hermes installation path. Defaults: `~/.hermes` (Linux/macOS), `%LOCALAPPDATA%\hermes\` (Windows). Used in direct mode to locate `config.yaml` and `pets/`.
+|| **Common Crate** | The `hermes-webui-companion-common` library crate (`crates/common/`). Single source of truth for shared types (`ActivePetConfig`, `PetList`, `SelectPetResponse`, `PetEntry`, `DataError`) and the `ConfigReader` — used by both the sidecar and the renderer. |
+| **HERMES_HOME** | Environment variable overriding the default Hermes installation path. Defaults: `~/.hermes` (Linux/macOS), `%LOCALAPPDATA%\\hermes\\` (Windows). Used in direct mode to locate `config.yaml` and `pets/`.
 
 ## State Machine
 
