@@ -1,17 +1,19 @@
 //! Direct filesystem client for pet data — no sidecar needed.
 //!
 //! Reads `~/.hermes/config.yaml` and `~/.hermes/pets/` directly from
-//! the local filesystem. Used in Direct Mode when the renderer and
-//! Hermes Agent share the same host.
+//! the local filesystem via the shared `ConfigReader` from `hermes-webui-companion-common`.
+//! Used in Direct Mode when the renderer and Hermes Agent share the same host.
 //!
 //! Implements `PetDataProvider` — same interface as `SidecarClient`.
 
 use std::fs;
 use std::path::PathBuf;
 
-use crate::sidecar_client::{
-    ActivePetResponse, PetDataProvider, PetEntry, PetListResponse, SelectPetResponse, SidecarError,
+use hermes_webui_companion_common::{
+    ActivePetConfig, ConfigReader, DataError, PetList, SelectPetResponse,
 };
+
+use crate::sidecar_client::PetDataProvider;
 
 // ---------------------------------------------------------------------------
 // DirectClient
@@ -19,50 +21,19 @@ use crate::sidecar_client::{
 
 /// Filesystem-based pet data provider.
 pub struct DirectClient {
-    hermes_home: PathBuf,
+    config: ConfigReader,
 }
 
 impl DirectClient {
     /// Create a new `DirectClient` rooted at the given Hermes home directory.
     ///
-    /// Pass `None` to use the platform default (`Self::default_hermes_home()`).
+    /// Pass `None` to use the platform default (`ConfigReader::resolve()`).
     pub fn new(hermes_home: Option<PathBuf>) -> Self {
-        Self { hermes_home: hermes_home.unwrap_or_else(Self::default_hermes_home) }
-    }
-
-    /// Platform-aware default Hermes home path.
-    ///
-    /// Respects `HERMES_HOME` environment variable.
-    /// Falls back to `~/.hermes` on Linux/macOS, `%LOCALAPPDATA%\hermes\` on Windows.
-    pub fn default_hermes_home() -> PathBuf {
-        if let Ok(env_home) = std::env::var("HERMES_HOME") {
-            return PathBuf::from(env_home);
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
-                return PathBuf::from(local_appdata).join("hermes");
-            }
-            if let Ok(userprofile) = std::env::var("USERPROFILE") {
-                return PathBuf::from(userprofile).join(".hermes");
-            }
-        }
-
-        // Linux / macOS / fallback
-        if let Ok(home) = std::env::var("HOME") {
-            PathBuf::from(home).join(".hermes")
-        } else {
-            PathBuf::from(".hermes")
-        }
-    }
-
-    fn config_path(&self) -> PathBuf {
-        self.hermes_home.join("config.yaml")
-    }
-
-    fn pets_dir(&self) -> PathBuf {
-        self.hermes_home.join("pets")
+        let config = match hermes_home {
+            Some(path) => ConfigReader::new(path),
+            None => ConfigReader::resolve(),
+        };
+        Self { config }
     }
 }
 
@@ -71,101 +42,41 @@ impl DirectClient {
 // ---------------------------------------------------------------------------
 
 impl PetDataProvider for DirectClient {
-    fn fetch_active_pet(&self) -> Result<ActivePetResponse, SidecarError> {
-        let config_path = self.config_path();
-        let yaml_str = fs::read_to_string(&config_path)
-            .map_err(|e| SidecarError { error: format!("cannot read config: {}", e) })?;
-
-        let config: serde_yaml_ng::Value = serde_yaml_ng::from_str(&yaml_str)
-            .map_err(|e| SidecarError { error: format!("invalid config: {}", e) })?;
-
-        let pet_enabled = config
-            .get("display")
-            .and_then(|d| d.get("pet"))
-            .and_then(|p| p.get("enabled"))
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-
-        if !pet_enabled {
-            return Err(SidecarError { error: "no_active_pet".into() });
+    fn fetch_active_pet(&self) -> Result<ActivePetConfig, DataError> {
+        if !self.config.pet_enabled()? {
+            return Err(DataError { error: "no_active_pet".into() });
         }
 
-        let slug = config
-            .get("display")
-            .and_then(|d| d.get("pet"))
-            .and_then(|p| p.get("slug"))
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty());
+        let slug = self
+            .config
+            .resolve_active_slug()?
+            .ok_or(DataError { error: "no_active_pet".into() })?;
 
-        let slug = match slug {
-            Some(s) => s.to_string(),
-            None => {
-                // Fallback: pick the first installed pet directory
-                let pets_dir = self.pets_dir();
-                let mut found = None;
-                if let Ok(entries) = fs::read_dir(&pets_dir) {
-                    for entry in entries.flatten() {
-                        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                            found = Some(entry.file_name().to_string_lossy().into_owned());
-                            break;
-                        }
-                    }
-                }
-                found.ok_or(SidecarError { error: "no_active_pet".into() })?
-            },
-        };
+        let display_name = self.config.read_display_name(&slug);
+        let spritesheet_url = format!("/pets/{}/spritesheet.webp", slug);
 
-        // Read display_name from pet.json
-        let pet_json_path = self.pets_dir().join(&slug).join("pet.json");
-        let display_name = fs::read_to_string(&pet_json_path)
-            .ok()
-            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.get("displayName").and_then(|n| n.as_str()).map(String::from))
-            .unwrap_or_else(|| slug.clone());
-
-        Ok(ActivePetResponse {
-            spritesheet_url: format!("/pets/{}/spritesheet.webp", slug),
-            slug,
-            display_name,
-        })
+        Ok(ActivePetConfig { slug, spritesheet_url, display_name })
     }
 
-    fn fetch_spritesheet(&self, slug: &str) -> Result<Vec<u8>, SidecarError> {
-        let path = self.pets_dir().join(slug).join("spritesheet.webp");
-        fs::read(&path)
-            .map_err(|e| SidecarError { error: format!("cannot read spritesheet: {}", e) })
+    fn fetch_spritesheet(&self, slug: &str) -> Result<Vec<u8>, DataError> {
+        let path = self.config.pets_dir().join(slug).join("spritesheet.webp");
+        fs::read(&path).map_err(|e| DataError { error: format!("cannot read spritesheet: {}", e) })
     }
 
-    fn fetch_pets(&self) -> Result<PetListResponse, SidecarError> {
-        let pets_dir = self.pets_dir();
-        let entries = fs::read_dir(&pets_dir)
-            .map_err(|e| SidecarError { error: format!("cannot read pets dir: {}", e) })?;
-
-        let mut pets = Vec::new();
-        for entry in entries.flatten() {
-            if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                continue;
-            }
-            let slug = entry.file_name().to_string_lossy().into_owned();
-            let pet_json_path = entry.path().join("pet.json");
-            let display_name = fs::read_to_string(&pet_json_path)
-                .ok()
-                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-                .and_then(|v| v.get("displayName").and_then(|n| n.as_str()).map(String::from))
-                .unwrap_or_else(|| slug.clone());
-            pets.push(PetEntry { slug, display_name });
-        }
-
-        // Determine active slug from config
+    fn fetch_pets(&self) -> Result<PetList, DataError> {
+        let pets = self.config.scan_installed_pets()?;
         let active = self.fetch_active_pet().map(|a| a.slug).unwrap_or_default();
-
-        Ok(PetListResponse { pets, active })
+        Ok(PetList { pets, active })
     }
 
-    fn select_pet(&self, slug: &str) -> Result<SelectPetResponse, SidecarError> {
+    fn select_pet(
+        &self,
+        slug: &str,
+    ) -> Result<hermes_webui_companion_common::SelectPetResponse, DataError> {
         // In direct mode, run hermes pets select via CLI subprocess.
         // First try hermes in PATH, then fall back to venv Python.
-        let hermes_home = self.hermes_home.to_string_lossy();
+        let hermes_home = ConfigReader::default_hermes_home();
+        let hermes_home_str = hermes_home.to_string_lossy();
 
         // Try hermes in PATH first
         let output = std::process::Command::new("hermes").args(["pets", "select", slug]).output();
@@ -175,39 +86,33 @@ impl PetDataProvider for DirectClient {
             _ => {
                 // Fallback: run via venv Python
                 #[cfg(target_os = "windows")]
-                let python = format!("{}\\hermes-agent\\venv\\Scripts\\python.exe", hermes_home);
+                let python =
+                    format!("{}\\\\hermes-agent\\\\venv\\\\Scripts\\\\python.exe", hermes_home_str);
                 #[cfg(not(target_os = "windows"))]
-                let python = format!("{}/hermes-agent/venv/bin/python", hermes_home);
+                let python = format!("{}/hermes-agent/venv/bin/python", hermes_home_str);
 
                 std::process::Command::new(&python)
                     .args(["-m", "hermes_cli", "pets", "select", slug])
                     .output()
-                    .map_err(|e| SidecarError {
-                        error: format!("hermes pets select failed: {}", e),
-                    })?
+                    .map_err(|e| DataError { error: format!("hermes pets select failed: {}", e) })?
             },
         };
 
         if !result.status.success() {
             let stderr = String::from_utf8_lossy(&result.stderr);
-            return Err(SidecarError {
+            return Err(DataError {
                 error: format!("hermes pets select failed: {}", stderr.trim()),
             });
         }
 
-        // Read display name from pet.json
-        let pet_json_path = self.pets_dir().join(slug).join("pet.json");
-        let display_name = fs::read_to_string(&pet_json_path)
-            .ok()
-            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.get("displayName").and_then(|n| n.as_str()).map(String::from))
-            .unwrap_or_else(|| slug.to_string());
+        let display_name = self.config.read_display_name(slug);
 
         Ok(SelectPetResponse { ok: true, slug: slug.to_string(), display_name })
     }
 
     fn is_available(&self) -> bool {
-        self.config_path().exists() && fs::read_to_string(self.config_path()).is_ok()
+        // Check if the stored config is readable
+        self.config.pet_enabled().is_ok()
     }
 }
 
@@ -286,14 +191,5 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let client = DirectClient::new(Some(dir.path().to_path_buf()));
         assert!(!client.is_available());
-    }
-
-    #[test]
-    fn default_hermes_home_uses_home_fallback() {
-        // On Linux/macOS, HOME is always set; this test just verifies
-        // the path ends with .hermes. Full env var test skipped due to
-        // unsafe_code=deny (cannot call set_var/remove_var).
-        let path = DirectClient::default_hermes_home();
-        assert!(path.ends_with(".hermes"));
     }
 }

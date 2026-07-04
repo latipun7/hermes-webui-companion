@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex};
 use companion_renderer::PetDataProvider;
 use companion_renderer::animation::{CompanionSnapshot, CompanionState};
 use companion_renderer::bridge_server::{self, BridgeState};
+use companion_renderer::common::ConfigReader;
 use companion_renderer::direct_client::DirectClient;
 use companion_renderer::sidecar_client::SidecarClient;
 use tauri::Manager;
@@ -30,7 +31,7 @@ use crate::health::spawn_health_check;
 fn detect_provider() -> Arc<dyn PetDataProvider + Send + Sync> {
     let direct = DirectClient::new(None);
     if direct.is_available() {
-        debug!("[companion] direct mode — reading from {:?}", DirectClient::default_hermes_home());
+        debug!("[companion] direct mode — reading from {:?}", ConfigReader::default_hermes_home());
         Arc::new(direct)
     } else {
         debug!("[companion] sidecar mode — connecting to :17888");
