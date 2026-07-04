@@ -41,8 +41,11 @@ pub(crate) fn check_webui_health() -> bool {
 
 /// Run initial synchronous health checks for both the pet data provider and WebUI,
 /// then spawn a background thread that probes both every 10 seconds.
-/// Returns an `AtomicBool` that is `true` only when BOTH are healthy.
-pub fn spawn_health_check(provider: Arc<dyn PetDataProvider + Send + Sync>) -> Arc<AtomicBool> {
+/// Writes directly to the provided `all_healthy` flag.
+pub fn spawn_health_check(
+    provider: Arc<dyn PetDataProvider + Send + Sync>,
+    all_healthy: Arc<AtomicBool>,
+) {
     let provider_ok = provider.is_available();
     let webui_ok = check_webui_health();
     let initial_healthy = provider_ok && webui_ok;
@@ -54,7 +57,7 @@ pub fn spawn_health_check(provider: Arc<dyn PetDataProvider + Send + Sync>) -> A
         debug!("[companion:health] webui unreachable at startup ({}) → Failed", webui_base_url());
     }
 
-    let all_healthy = Arc::new(AtomicBool::new(initial_healthy));
+    all_healthy.store(initial_healthy, Ordering::SeqCst);
 
     {
         let all_healthy = all_healthy.clone();
@@ -83,8 +86,6 @@ pub fn spawn_health_check(provider: Arc<dyn PetDataProvider + Send + Sync>) -> A
             }
         });
     }
-
-    all_healthy
 }
 
 // ---------------------------------------------------------------------------
