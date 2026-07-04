@@ -3,14 +3,15 @@
 //! Each function is a `#[tauri::command]` invoked from the frontend
 //! via `invokeTauri()` over Tauri IPC.
 
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use companion_renderer::PetDataProvider;
-use companion_renderer::animation::{CompanionSnapshot, StateResponse};
+use companion_renderer::animation::StateResponse;
 use tauri::Manager;
 use tauri::menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 
+use crate::CompanionContext;
 use crate::debug;
 
 #[tauri::command]
@@ -67,11 +68,10 @@ pub fn open_webui() {
 
 #[tauri::command]
 pub fn get_companion_state(
-    state: tauri::State<'_, Arc<Mutex<CompanionSnapshot>>>,
-    all_healthy: tauri::State<'_, Arc<AtomicBool>>,
+    ctx: tauri::State<'_, Arc<CompanionContext>>,
 ) -> Result<serde_json::Value, String> {
-    let snap = state.lock().map_err(|e| e.to_string())?;
-    let healthy = all_healthy.load(Ordering::SeqCst);
+    let snap = ctx.snapshot.lock().map_err(|e| e.to_string())?;
+    let healthy = ctx.all_healthy.load(Ordering::SeqCst);
     let resp = StateResponse::from_snapshot(&snap, healthy);
     serde_json::to_value(&resp).map_err(|e| e.to_string())
 }
@@ -93,8 +93,8 @@ pub fn set_bubbles_visible(
 /// Return and reset the drag delta X since last call.
 /// Positive = dragging right, negative = dragging left.
 #[tauri::command]
-pub fn get_drag_dx(drag_dx: tauri::State<'_, Arc<AtomicI32>>) -> Result<i32, String> {
-    Ok(drag_dx.swap(0, Ordering::SeqCst))
+pub fn get_drag_dx(ctx: tauri::State<'_, Arc<CompanionContext>>) -> Result<i32, String> {
+    Ok(ctx.drag_dx.swap(0, Ordering::SeqCst))
 }
 
 /// Quit the entire application — both pet and bubbles windows.
