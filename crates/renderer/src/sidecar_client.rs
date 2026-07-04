@@ -3,7 +3,7 @@
 //! Fetches active pet configuration and spritesheet data from the
 //! hermes-webui-companion-sidecar running at `http://127.0.0.1:17888`.
 
-use serde::Deserialize;
+use hermes_webui_companion_common::{ActivePetConfig, DataError, PetList, SelectPetResponse};
 
 // ---------------------------------------------------------------------------
 // PetDataProvider trait — unified interface for pet data access
@@ -14,52 +14,12 @@ use serde::Deserialize;
 /// Implemented by `SidecarClient` (HTTP to sidecar) and `DirectClient`
 /// (filesystem reads) so call sites are agnostic to the data source.
 pub trait PetDataProvider {
-    fn fetch_active_pet(&self) -> Result<ActivePetResponse, SidecarError>;
-    fn fetch_spritesheet(&self, slug: &str) -> Result<Vec<u8>, SidecarError>;
-    fn fetch_pets(&self) -> Result<PetListResponse, SidecarError>;
-    fn select_pet(&self, slug: &str) -> Result<SelectPetResponse, SidecarError>;
+    fn fetch_active_pet(&self) -> Result<ActivePetConfig, DataError>;
+    fn fetch_spritesheet(&self, slug: &str) -> Result<Vec<u8>, DataError>;
+    fn fetch_pets(&self) -> Result<PetList, DataError>;
+    fn select_pet(&self, slug: &str) -> Result<SelectPetResponse, DataError>;
     /// Whether the data source is currently available.
     fn is_available(&self) -> bool;
-}
-
-// ---------------------------------------------------------------------------
-// Response types
-// ---------------------------------------------------------------------------
-
-/// Response from `GET /api/pet/active`.
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct ActivePetResponse {
-    pub slug: String,
-    pub spritesheet_url: String,
-    pub display_name: String,
-}
-
-/// Error from the sidecar (non-200 response).
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct SidecarError {
-    pub error: String,
-}
-
-/// A single pet entry from GET /api/pets.
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct PetEntry {
-    pub slug: String,
-    pub display_name: String,
-}
-
-/// Response from GET /api/pets.
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct PetListResponse {
-    pub pets: Vec<PetEntry>,
-    pub active: String,
-}
-
-/// Response from POST /api/pet/select.
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct SelectPetResponse {
-    pub ok: bool,
-    pub slug: String,
-    pub display_name: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -79,52 +39,52 @@ impl SidecarClient {
 
     /// Fetch the currently active pet configuration.
     ///
-    /// Returns `Ok(ActivePetResponse)` on success, or `Err(SidecarError)`
+    /// Returns `Ok(ActivePetConfig)` on success, or `Err(DataError)`
     /// if the sidecar returned an error (pet disabled, not found, etc.).
-    pub fn fetch_active_pet(&self) -> Result<ActivePetResponse, SidecarError> {
+    pub fn fetch_active_pet(&self) -> Result<ActivePetConfig, DataError> {
         let url = format!("{}/api/pet/active", self.base_url);
         let response = ureq::get(&url)
             .config()
             .http_status_as_error(false)
             .build()
             .call()
-            .map_err(|e| SidecarError { error: format!("http error: {}", e) })?;
+            .map_err(|e| DataError { error: format!("http error: {}", e) })?;
 
         let status = response.status();
         if status == 200 {
             response
                 .into_body()
-                .read_json::<ActivePetResponse>()
-                .map_err(|e| SidecarError { error: format!("parse error: {}", e) })
+                .read_json::<ActivePetConfig>()
+                .map_err(|e| DataError { error: format!("parse error: {}", e) })
         } else {
             Err(response
                 .into_body()
-                .read_json::<SidecarError>()
-                .unwrap_or(SidecarError { error: format!("unexpected status: {}", status) }))
+                .read_json::<DataError>()
+                .unwrap_or(DataError { error: format!("unexpected status: {}", status) }))
         }
     }
 
     /// Fetch the spritesheet bytes for a given pet slug.
-    pub fn fetch_spritesheet(&self, slug: &str) -> Result<Vec<u8>, SidecarError> {
+    pub fn fetch_spritesheet(&self, slug: &str) -> Result<Vec<u8>, DataError> {
         let url = format!("{}/pets/{}/spritesheet.webp", self.base_url, slug);
         let response = ureq::get(&url)
             .config()
             .http_status_as_error(false)
             .build()
             .call()
-            .map_err(|e| SidecarError { error: format!("http error: {}", e) })?;
+            .map_err(|e| DataError { error: format!("http error: {}", e) })?;
 
         let status = response.status();
         if status == 200 {
             response
                 .into_body()
                 .read_to_vec()
-                .map_err(|e| SidecarError { error: format!("read error: {}", e) })
+                .map_err(|e| DataError { error: format!("read error: {}", e) })
         } else {
             Err(response
                 .into_body()
-                .read_json::<SidecarError>()
-                .unwrap_or(SidecarError { error: format!("unexpected status: {}", status) }))
+                .read_json::<DataError>()
+                .unwrap_or(DataError { error: format!("unexpected status: {}", status) }))
         }
     }
     /// Check whether the sidecar is healthy (application-level).
@@ -149,31 +109,31 @@ impl SidecarClient {
     }
 
     /// Fetch the list of all installed pets with display names.
-    pub fn fetch_pets(&self) -> Result<PetListResponse, SidecarError> {
+    pub fn fetch_pets(&self) -> Result<PetList, DataError> {
         let url = format!("{}/api/pets", self.base_url);
         let response = ureq::get(&url)
             .config()
             .http_status_as_error(false)
             .build()
             .call()
-            .map_err(|e| SidecarError { error: format!("http error: {}", e) })?;
+            .map_err(|e| DataError { error: format!("http error: {}", e) })?;
 
         let status = response.status();
         if status == 200 {
             response
                 .into_body()
-                .read_json::<PetListResponse>()
-                .map_err(|e| SidecarError { error: format!("parse error: {}", e) })
+                .read_json::<PetList>()
+                .map_err(|e| DataError { error: format!("parse error: {}", e) })
         } else {
             Err(response
                 .into_body()
-                .read_json::<SidecarError>()
-                .unwrap_or(SidecarError { error: format!("unexpected status: {}", status) }))
+                .read_json::<DataError>()
+                .unwrap_or(DataError { error: format!("unexpected status: {}", status) }))
         }
     }
 
     /// Select a new active pet via hermes pets select.
-    pub fn select_pet(&self, slug: &str) -> Result<SelectPetResponse, SidecarError> {
+    pub fn select_pet(&self, slug: &str) -> Result<SelectPetResponse, DataError> {
         let url = format!("{}/api/pet/select", self.base_url);
         let body = serde_json::json!({"slug": slug});
         let response = ureq::post(&url)
@@ -181,19 +141,19 @@ impl SidecarClient {
             .http_status_as_error(false)
             .build()
             .send_json(&body)
-            .map_err(|e| SidecarError { error: format!("http error: {}", e) })?;
+            .map_err(|e| DataError { error: format!("http error: {}", e) })?;
 
         let status = response.status();
         if status == 200 {
             response
                 .into_body()
                 .read_json::<SelectPetResponse>()
-                .map_err(|e| SidecarError { error: format!("parse error: {}", e) })
+                .map_err(|e| DataError { error: format!("parse error: {}", e) })
         } else {
             Err(response
                 .into_body()
-                .read_json::<SidecarError>()
-                .unwrap_or(SidecarError { error: format!("unexpected status: {}", status) }))
+                .read_json::<DataError>()
+                .unwrap_or(DataError { error: format!("unexpected status: {}", status) }))
         }
     }
 }
@@ -203,16 +163,16 @@ impl SidecarClient {
 // ---------------------------------------------------------------------------
 
 impl PetDataProvider for SidecarClient {
-    fn fetch_active_pet(&self) -> Result<ActivePetResponse, SidecarError> {
+    fn fetch_active_pet(&self) -> Result<ActivePetConfig, DataError> {
         SidecarClient::fetch_active_pet(self)
     }
-    fn fetch_spritesheet(&self, slug: &str) -> Result<Vec<u8>, SidecarError> {
+    fn fetch_spritesheet(&self, slug: &str) -> Result<Vec<u8>, DataError> {
         SidecarClient::fetch_spritesheet(self, slug)
     }
-    fn fetch_pets(&self) -> Result<PetListResponse, SidecarError> {
+    fn fetch_pets(&self) -> Result<PetList, DataError> {
         SidecarClient::fetch_pets(self)
     }
-    fn select_pet(&self, slug: &str) -> Result<SelectPetResponse, SidecarError> {
+    fn select_pet(&self, slug: &str) -> Result<SelectPetResponse, DataError> {
         SidecarClient::select_pet(self, slug)
     }
     fn is_available(&self) -> bool {

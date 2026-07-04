@@ -10,5 +10,6 @@ pub mod direct_client;
 pub mod sidecar_client;
 pub mod sprite;
 
-// Re-export the PetDataProvider trait for crate consumers.
+// Re-exports from common for downstream consumers.
+pub use hermes_webui_companion_common as common;
 pub use sidecar_client::PetDataProvider;

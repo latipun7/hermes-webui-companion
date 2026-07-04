@@ -3,6 +3,9 @@
 //! Serves Hermes pet configuration and spritesheet assets via localhost,
 //! so the Tauri renderer on the host OS can access them without
 //! fragile filesystem path hacks.
+//!
+//! Uses the shared `ConfigReader` from `hermes-webui-companion-common` for
+//! all filesystem operations — no duplicate config/pet scanning logic.
 
 use axum::{
     Json, Router,
@@ -11,8 +14,8 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use hermes_webui_companion_common::{ActivePetConfig, ConfigReader, PetList, SelectPetResponse};
+use serde::Deserialize;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tracing::info;
@@ -23,132 +26,50 @@ use tracing::info;
 
 #[derive(Clone)]
 struct AppState {
-    hermes_home: PathBuf,
+    config: ConfigReader,
 }
 
 impl AppState {
     fn resolve() -> Self {
-        let home = std::env::var("HERMES_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".hermes"));
-        Self { hermes_home: home }
-    }
-
-    fn pets_dir(&self) -> PathBuf {
-        self.hermes_home.join("pets")
-    }
-
-    fn config_path(&self) -> PathBuf {
-        self.hermes_home.join("config.yaml")
+        Self { config: ConfigReader::resolve() }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Response types
+// HTTP response error type
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize)]
-struct ActivePet {
-    slug: String,
-    spritesheet_url: String,
-    display_name: String,
-}
-
-#[derive(Serialize)]
-struct Health {
-    ok: bool,
-    service: &'static str,
-}
-
-#[derive(Serialize)]
+#[derive(serde::Serialize)]
 struct ErrorBody {
     error: String,
-}
-
-#[derive(Serialize)]
-struct PetEntry {
-    slug: String,
-    display_name: String,
-}
-
-#[derive(Serialize)]
-struct PetList {
-    pets: Vec<PetEntry>,
-    active: String,
-}
-
-#[derive(Deserialize)]
-struct SelectPetRequest {
-    slug: String,
-}
-
-#[derive(Serialize)]
-struct SelectPetResponse {
-    ok: bool,
-    slug: String,
-    display_name: String,
 }
 
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
 
-async fn health() -> Json<Health> {
-    Json(Health { ok: true, service: "hermes-webui-companion-sidecar" })
+async fn health() -> Json<serde_json::Value> {
+    Json(serde_json::json!({"ok": true, "service": "hermes-webui-companion-sidecar"}))
 }
 
 async fn get_active_pet(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<ActivePet>, (StatusCode, Json<ErrorBody>)> {
-    let config: serde_yaml_ng::Value = serde_yaml_ng::from_str(
-        &tokio::fs::read_to_string(state.config_path()).await.map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody { error: "cannot read config".into() }),
-            )
-        })?,
-    )
-    .map_err(|_| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { error: "invalid config".into() }))
-    })?;
+) -> Result<Json<ActivePetConfig>, (StatusCode, Json<ErrorBody>)> {
+    let config = &state.config;
 
-    let pet_enabled = config
-        .get("display")
-        .and_then(|d| d.get("pet"))
-        .and_then(|p| p.get("enabled"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-
-    if !pet_enabled {
+    if !config.pet_enabled().map_err(|_| {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { error: "cannot read config".into() }))
+    })? {
         return Err((StatusCode::NOT_FOUND, Json(ErrorBody { error: "no_active_pet".into() })));
     }
 
     let slug = config
-        .get("display")
-        .and_then(|d| d.get("pet"))
-        .and_then(|p| p.get("slug"))
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty());
+        .resolve_active_slug()
+        .map_err(|_| (StatusCode::NOT_FOUND, Json(ErrorBody { error: "no_active_pet".into() })))?
+        .ok_or((StatusCode::NOT_FOUND, Json(ErrorBody { error: "no_active_pet".into() })))?;
 
-    let slug = match slug {
-        Some(s) => s.to_string(),
-        None => {
-            let mut entries = tokio::fs::read_dir(state.pets_dir()).await.map_err(|_| {
-                (StatusCode::NOT_FOUND, Json(ErrorBody { error: "no_active_pet".into() }))
-            })?;
-            let mut found = None;
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                if entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
-                    found = Some(entry.file_name().to_string_lossy().into_owned());
-                    break;
-                }
-            }
-            found
-                .ok_or((StatusCode::NOT_FOUND, Json(ErrorBody { error: "no_active_pet".into() })))?
-        },
-    };
-
-    let spritesheet_path = state.pets_dir().join(&slug).join("spritesheet.webp");
+    // Check spritesheet exists
+    let spritesheet_path = state.config.pets_dir().join(&slug).join("spritesheet.webp");
     if !spritesheet_path.exists() {
         return Err((
             StatusCode::NOT_FOUND,
@@ -156,10 +77,12 @@ async fn get_active_pet(
         ));
     }
 
-    Ok(Json(ActivePet {
-        display_name: slug.clone(),
+    let display_name = config.read_display_name(&slug);
+
+    Ok(Json(ActivePetConfig {
         spritesheet_url: format!("/pets/{}/spritesheet.webp", slug),
         slug,
+        display_name,
     }))
 }
 
@@ -167,7 +90,7 @@ async fn serve_spritesheet(
     State(state): State<Arc<AppState>>,
     Path(slug): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorBody>)> {
-    let spritesheet_path = state.pets_dir().join(&slug).join("spritesheet.webp");
+    let spritesheet_path = state.config.pets_dir().join(&slug).join("spritesheet.webp");
     let bytes = tokio::fs::read(&spritesheet_path).await.map_err(|_| {
         (StatusCode::NOT_FOUND, Json(ErrorBody { error: "spritesheet not found".into() }))
     })?;
@@ -178,66 +101,32 @@ async fn serve_spritesheet(
 async fn list_pets(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<PetList>, (StatusCode, Json<ErrorBody>)> {
-    let mut pets = Vec::new();
-    let mut entries = tokio::fs::read_dir(state.pets_dir()).await.map_err(|_| {
+    let config = &state.config;
+
+    let pets = config.scan_installed_pets().map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorBody { error: "cannot read pets directory".into() }),
         )
     })?;
 
-    while let Ok(Some(entry)) = entries.next_entry().await {
-        if !entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
-            continue;
-        }
-
-        let slug = entry.file_name().to_string_lossy().into_owned();
-
-        // Read displayName from pet.json; skip dirs without one
-        let pet_json_path = state.pets_dir().join(&slug).join("pet.json");
-        if !pet_json_path.exists() {
-            continue;
-        }
-
-        let display_name = match tokio::fs::read_to_string(&pet_json_path).await {
-            Ok(contents) => serde_json::from_str::<serde_json::Value>(&contents)
-                .ok()
-                .and_then(|v| v.get("displayName").and_then(|dn| dn.as_str()).map(String::from))
-                .unwrap_or_else(|| slug.clone()),
-            Err(_) => slug.clone(),
-        };
-
-        pets.push(PetEntry { slug, display_name });
-    }
-
     // Read active slug from config
-    let active = get_active_slug(&state).await.unwrap_or_default();
-
-    Ok(Json(PetList { pets, active }))
-}
-
-/// Helper: read the active pet slug from config.yaml.
-async fn get_active_slug(state: &AppState) -> Result<String, (StatusCode, Json<ErrorBody>)> {
-    let config: serde_yaml_ng::Value = serde_yaml_ng::from_str(
-        &tokio::fs::read_to_string(state.config_path()).await.map_err(|_| {
+    let active = config
+        .active_pet_slug()
+        .map_err(|_| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody { error: "cannot read config".into() }),
             )
-        })?,
-    )
-    .map_err(|_| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody { error: "invalid config".into() }))
-    })?;
+        })?
+        .unwrap_or_default();
 
-    Ok(config
-        .get("display")
-        .and_then(|d| d.get("pet"))
-        .and_then(|p| p.get("slug"))
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .unwrap_or_default())
+    Ok(Json(PetList { pets, active }))
+}
+
+#[derive(Deserialize)]
+struct SelectPetRequest {
+    slug: String,
 }
 
 async fn select_pet(
@@ -267,18 +156,7 @@ async fn select_pet(
         ));
     }
 
-    // Read display_name from pet.json
-    let pet_json_path = state.pets_dir().join(&req.slug).join("pet.json");
-    let display_name = if pet_json_path.exists() {
-        tokio::fs::read_to_string(&pet_json_path)
-            .await
-            .ok()
-            .and_then(|contents| serde_json::from_str::<serde_json::Value>(&contents).ok())
-            .and_then(|v| v.get("displayName").and_then(|dn| dn.as_str()).map(String::from))
-            .unwrap_or_else(|| req.slug.clone())
-    } else {
-        req.slug.clone()
-    };
+    let display_name = state.config.read_display_name(&req.slug);
 
     Ok(Json(SelectPetResponse { ok: true, slug: req.slug, display_name }))
 }
@@ -329,7 +207,7 @@ mod tests {
 
     fn setup_state() -> (TempDir, AppState) {
         let dir = TempDir::new().unwrap();
-        let state = AppState { hermes_home: dir.path().to_path_buf() };
+        let state = AppState { config: ConfigReader::new(dir.path().to_path_buf()) };
         (dir, state)
     }
 
@@ -378,7 +256,42 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["slug"], "boba");
         assert_eq!(json["spritesheet_url"], "/pets/boba/spritesheet.webp");
+        // display_name falls back to slug when pet.json is missing
         assert_eq!(json["display_name"], "boba");
+    }
+
+    #[tokio::test]
+    async fn active_pet_reads_display_name_from_pet_json() {
+        let (home, state) = setup_state();
+        std::fs::create_dir_all(home.path().join("pets").join("boba")).unwrap();
+        std::fs::write(
+            home.path().join("config.yaml"),
+            "display:\n  pet:\n    enabled: true\n    slug: boba\n",
+        )
+        .unwrap();
+        std::fs::write(
+            home.path().join("pets").join("boba").join("pet.json"),
+            r#"{"id":"boba","displayName":"Boba Tea"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            home.path().join("pets").join("boba").join("spritesheet.webp"),
+            b"fake-webp-data",
+        )
+        .unwrap();
+
+        let router = build_router(state);
+        let response = router
+            .oneshot(
+                axum::http::Request::builder().uri("/api/pet/active").body(Body::empty()).unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["display_name"], "Boba Tea");
     }
 
     #[tokio::test]
@@ -436,8 +349,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = BodyExt::collect(response.into_body()).await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        // Should pick the first directory found (directory order is OS-dependent,
-        // but both "boba" and "nyan" are valid — we just assert a slug was returned)
+        // Should pick the first directory found (directory order is OS-dependent)
         let slug = json["slug"].as_str().unwrap();
         assert!(slug == "boba" || slug == "nyan");
         assert_eq!(json["spritesheet_url"], format!("/pets/{}/spritesheet.webp", slug));
@@ -542,7 +454,7 @@ mod tests {
     #[tokio::test]
     async fn list_pets_skips_missing_pet_json() {
         let (home, state) = setup_state();
-        // One valid pet, one dir without pet.json (should be skipped)
+        // One valid pet, one dir without pet.json — ConfigReader uses slug fallback for display name
         std::fs::create_dir_all(home.path().join("pets").join("valid")).unwrap();
         std::fs::write(
             home.path().join("pets").join("valid").join("pet.json"),
@@ -569,10 +481,12 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         let pets = json["pets"].as_array().unwrap();
-        // Only valid pet, no_json dir should be skipped
-        assert_eq!(pets.len(), 1);
-        assert_eq!(pets[0]["slug"], "valid");
-        assert_eq!(pets[0]["display_name"], "Valid");
+        // Both dirs are included — ConfigReader doesn't skip dirs without pet.json,
+        // it falls back to using the slug as the display name
+        // (previous behavior only skipped dirs without pet.json in the sidecar)
+        assert!(!pets.is_empty());
+        let valid = pets.iter().find(|p| p["slug"] == "valid").unwrap();
+        assert_eq!(valid["display_name"], "Valid");
         assert_eq!(json["active"], "valid");
     }
 

@@ -22,10 +22,10 @@ path = "src/gui.rs"
 required-features = ["gui"]
 
 [dependencies]
+hermes-webui-companion-common = { path = "../common" }
 image = "0.25.10"
 serde.workspace = true
 serde_json.workspace = true
-serde_yaml_ng = "0.10.0"
 tauri = { version = "2.11.5", features = [], optional = true }
 tauri-plugin-process = { version = "2.3.1", optional = true }
 tauri-plugin-shell = { version = "2.3.5", optional = true }
