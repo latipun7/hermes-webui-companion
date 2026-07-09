@@ -11,7 +11,7 @@ that reacts to companion state in real-time.
 ```mermaid
 flowchart LR
     WEBUI["WebUI :8787"] -->|snapshots| BRIDGE["Bridge :17787"]
-    
+
     FS["~/.hermes/"] -->|direct| CLIENT["PetDataProvider"]
     SC["Sidecar :17888"] -->|HTTP| CLIENT
     SC -.-> FS

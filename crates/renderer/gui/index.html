@@ -1,61 +1,71 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hermes WebUI Companion</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; border: 0; outline: none; }
-    html, body {
-      position: relative;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: transparent !important;
-    }
-    #pet-sprite {
-      position: absolute;
-      inset: 0;
-      background-size: 800% 900%;
-      background-repeat: no-repeat;
-      image-rendering: pixelated;
-    }
-    #bubble-toggle {
-      position: absolute;
-      top: 4px;
-      right: 4px;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.12);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      cursor: pointer;
-      -webkit-app-region: no-drag;
-      z-index: 10;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.3);
-      transition: background 0.15s, border-color 0.15s, color 0.15s;
-      user-select: none;
-      line-height: 1;
-    }
-    #bubble-toggle:hover {
-      background: rgba(255, 255, 255, 0.25);
-      border-color: rgba(255, 255, 255, 0.4);
-      color: rgba(255, 255, 255, 0.6);
-    }
-    #bubble-toggle.on {
-      background: rgba(255, 255, 255, 0.2);
-      border-color: rgba(255, 255, 255, 0.35);
-      color: rgba(255, 255, 255, 0.5);
-    }
-  </style>
-</head>
-<body>
-  <div id="pet-sprite"></div>
-  <div id="bubble-toggle" class="on" title="Toggle bubble">▼</div>
-  <script src="pet.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hermes WebUI Companion</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        border: 0;
+        outline: none;
+      }
+      html,
+      body {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent !important;
+      }
+      #pet-sprite {
+        position: absolute;
+        inset: 0;
+        background-size: 800% 900%;
+        background-repeat: no-repeat;
+        image-rendering: pixelated;
+      }
+      #bubble-toggle {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        cursor: pointer;
+        -webkit-app-region: no-drag;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.3);
+        transition:
+          background 0.15s,
+          border-color 0.15s,
+          color 0.15s;
+        user-select: none;
+        line-height: 1;
+      }
+      #bubble-toggle:hover {
+        background: rgba(255, 255, 255, 0.25);
+        border-color: rgba(255, 255, 255, 0.4);
+        color: rgba(255, 255, 255, 0.6);
+      }
+      #bubble-toggle.on {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.35);
+        color: rgba(255, 255, 255, 0.5);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="pet-sprite"></div>
+    <div id="bubble-toggle" class="on" title="Toggle bubble">▼</div>
+    <script src="pet.js"></script>
+  </body>
 </html>

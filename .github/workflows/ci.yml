@@ -47,6 +47,12 @@ jobs:
             cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
             cargo-${{ runner.os }}-
 
+      - name: 🖊️ Check Formatting (Prettier)
+        run: npx --yes prettier --check --ignore-unknown .
+
+      - name: 🖊️ Check Markdown Lint
+        run: npx --yes markdownlint-cli '**/*.md'
+
       - name: 🎨 Check Formatting
         run: cargo fmt --check --all
 

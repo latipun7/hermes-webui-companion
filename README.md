@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD041 -->
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/latipun7/hermes-webui-companion/main/crates/renderer/icons/icon.png">
@@ -17,10 +18,10 @@
     <a href="#-building-from-source">Building</a>
   </p>
   <p align="center">
-    <img src="https://img.shields.io/github/v/release/latipun7/hermes-webui-companion?style=flat&label=Release&color=%239987CE">
-    <img src="https://img.shields.io/github/actions/workflow/status/latipun7/hermes-webui-companion/ci.yml?branch=main&style=flat&label=CI&logo=github">
-    <img src="https://img.shields.io/badge/Rust-1.96+-orange?logo=rust&style=flat">
-    <img src="https://img.shields.io/badge/Tauri-v2-%23FFC131?logo=tauri&style=flat">
+    <img src="https://img.shields.io/github/v/release/latipun7/hermes-webui-companion?style=flat&label=Release&color=%239987CE" alt="Release">
+    <img src="https://img.shields.io/github/actions/workflow/status/latipun7/hermes-webui-companion/ci.yml?branch=main&style=flat&label=CI&logo=github" alt="CI status">
+    <img src="https://img.shields.io/badge/Rust-1.96+-orange?logo=rust&style=flat" alt="Rust version">
+    <img src="https://img.shields.io/badge/Tauri-v2-%23FFC131?logo=tauri&style=flat" alt="Tauri version">
   </p>
 </div>
 
@@ -61,16 +62,16 @@ flowchart LR
 
 ### Two Modes
 
-| Mode | When | How |
-|------|------|-----|
-| **Direct** | Hermes & renderer on same host | Reads `~/.hermes/` directly via filesystem |
+| Mode        | When                            | How                                                |
+| ----------- | ------------------------------- | -------------------------------------------------- |
+| **Direct**  | Hermes & renderer on same host  | Reads `~/.hermes/` directly via filesystem         |
 | **Sidecar** | Hermes in WSL, renderer on host | HTTP to sidecar at `:17888` (bridges WSL boundary) |
 
 The renderer auto-detects the mode at startup and stays in it for the session lifetime.
 
-| Component    | Required?         | What it does                                      |
-| ------------ | ----------------- | ------------------------------------------------- |
-| **Renderer** | Always            | Renders the pet, shows bubbles, handles state     |
+| Component    | Required?         | What it does                                       |
+| ------------ | ----------------- | -------------------------------------------------- |
+| **Renderer** | Always            | Renders the pet, shows bubbles, handles state      |
 | **Sidecar**  | WSL / remote only | Bridges `~/.hermes/` from WSL to the host via HTTP |
 
 ## ⚡ Quick Start
@@ -205,12 +206,12 @@ git push origin v0.1.0
 
 ## 🔧 Configuration
 
-| Environment Variable     | Default | Description                    |
-| ------------------------ | ------- | ------------------------------ |
+| Environment Variable     | Default | Description                                     |
+| ------------------------ | ------- | ----------------------------------------------- |
 | `HERMES_HOME`            | (auto)  | Override Hermes installation path (direct mode) |
-| `HERMES_WEBUI_PORT`      | `8787`  | WebUI health check port        |
-| `HERMES_COMPANION_DEBUG` | —       | Set to `1` for verbose logging |
-| `CARGO_TARGET_DIR`       | —       | Custom build output directory  |
+| `HERMES_WEBUI_PORT`      | `8787`  | WebUI health check port                         |
+| `HERMES_COMPANION_DEBUG` | —       | Set to `1` for verbose logging                  |
+| `CARGO_TARGET_DIR`       | —       | Custom build output directory                   |
 
 Debug logging gives you scoped prefixes:
 
@@ -223,13 +224,13 @@ Debug logging gives you scoped prefixes:
 
 Each [GitHub Release](https://github.com/latipun7/hermes-webui-companion/releases) ships:
 
-| File | Platform | Description |
-|------|----------|-------------|
-| `hermes-webui-companion-sidecar` | Linux | Sidecar binary |
-| `hermes-webui-companion-sidecar.service` | Linux | systemd unit file |
-| `*-x86_64-unknown-linux-gnu` | Linux | Renderer binary |
-| `*-x86_64-apple-darwin` | macOS | Renderer binary |
-| `*-x86_64-pc-windows-msvc.exe` | Windows | Renderer binary |
+| File                                     | Platform | Description       |
+| ---------------------------------------- | -------- | ----------------- |
+| `hermes-webui-companion-sidecar`         | Linux    | Sidecar binary    |
+| `hermes-webui-companion-sidecar.service` | Linux    | systemd unit file |
+| `*-x86_64-unknown-linux-gnu`             | Linux    | Renderer binary   |
+| `*-x86_64-apple-darwin`                  | macOS    | Renderer binary   |
+| `*-x86_64-pc-windows-msvc.exe`           | Windows  | Renderer binary   |
 
 ## 📚 Documentation
 

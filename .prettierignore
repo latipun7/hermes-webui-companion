@@ -1,0 +1,5 @@
+node_modules/
+target/
+crates/renderer/gen/
+crates/renderer/capabilities/
+Cargo.lock

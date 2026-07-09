@@ -1,5 +1,5 @@
 # Makefile — convenience commands for webui-companion
-.PHONY: all fmt clippy check test clean ci setup-hooks lint
+.PHONY: all fmt clippy check test clean ci setup-hooks lint markdownlint prettier
 
 all: check
 
@@ -12,6 +12,12 @@ clippy:
 # clippy already runs check internally — this alias is pure fmt + clippy
 check: fmt clippy
 
+markdownlint:
+	npx --yes markdownlint-cli '**/*.md'
+
+prettier:
+	npx --yes prettier --check --ignore-unknown .
+
 test:
 	cargo test --locked --workspace --all-targets --all-features
 
@@ -19,7 +25,7 @@ clean:
 	cargo clean
 
 # CI gate — everything that must pass before merge
-ci: check test
+ci: check prettier markdownlint test
 
 # Configure git to use .githooks (one-time setup, or after clone)
 setup-hooks:

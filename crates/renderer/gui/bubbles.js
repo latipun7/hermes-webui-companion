@@ -16,9 +16,9 @@ let cardHasContent = false; // tracks whether card is currently showing content
 
 async function setBubbleVisible(visible) {
   try {
-    await fetch("http://127.0.0.1:17787/api/bubbles/visible", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    await fetch('http://127.0.0.1:17787/api/bubbles/visible', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ visible }),
     });
     cardHasContent = visible;
@@ -30,40 +30,40 @@ async function setBubbleVisible(visible) {
 // ── Init ───────────────────────────────────────────────────
 
 function init() {
-  const card = document.getElementById("card");
+  const card = document.getElementById('card');
   if (!card) return;
 
-  card.addEventListener("click", async () => {
+  card.addEventListener('click', async () => {
     if (opening) return;
     opening = true;
-    card.classList.add("opening");
+    card.classList.add('opening');
 
     try {
       // Get current attention item for session_id
-      const res = await fetch("http://127.0.0.1:17787/api/state");
+      const res = await fetch('http://127.0.0.1:17787/api/state');
       const state = await res.json();
       const attention = state.attention || [];
       const first = attention[0];
 
-      await fetch("http://127.0.0.1:17787/api/open-webui", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      await fetch('http://127.0.0.1:17787/api/open-webui', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          session_id: (first && first.session_id) || "",
+          session_id: (first && first.session_id) || '',
         }),
       });
     } catch (e) {
       // Fallback: open homepage
-      await fetch("http://127.0.0.1:17787/api/open-webui", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: "" }),
+      await fetch('http://127.0.0.1:17787/api/open-webui', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: '' }),
       });
     }
 
     setTimeout(() => {
       opening = false;
-      card.classList.remove("opening");
+      card.classList.remove('opening');
     }, 2000);
   });
 }
@@ -71,13 +71,13 @@ function init() {
 // ── Poll ──────────────────────────────────────────────────
 
 async function poll() {
-  const card = document.getElementById("card");
+  const card = document.getElementById('card');
   if (!card) return;
 
   try {
-    const res = await fetch("http://127.0.0.1:17787/api/state");
+    const res = await fetch('http://127.0.0.1:17787/api/state');
     if (!res.ok) {
-      card.className = "";
+      card.className = '';
       setBubbleVisible(false);
       lastState = null;
       return;
@@ -90,40 +90,39 @@ async function poll() {
     lastState = stateKey;
 
     const attention = state.attention || [];
-    const resolved = state.resolved_animation || state.state || "idle";
+    const resolved = state.resolved_animation || state.state || 'idle';
 
     let status = null;
     let item = null;
 
     // Priority chain is resolved by the Rust backend — frontend just maps to card states.
-    if (resolved === "waiting") {
-      status = "approval";
-      item = attention.find((a) => a.status === "approval");
-    } else if (resolved === "review") {
-      status = "clarify";
-      item = attention.find((a) => a.status === "clarify");
-    } else if (resolved === "running") {
-      status = "running";
+    if (resolved === 'waiting') {
+      status = 'approval';
+      item = attention.find((a) => a.status === 'approval');
+    } else if (resolved === 'review') {
+      status = 'clarify';
+      item = attention.find((a) => a.status === 'clarify');
+    } else if (resolved === 'running') {
+      status = 'running';
       item = attention[0];
-    } else if (resolved === "waving") {
-      status = "ready";
+    } else if (resolved === 'waving') {
+      status = 'ready';
       item = attention[0];
     }
     // idle / failed → status stays null → card hides (fixes: failed state previously leaked)
 
     if (status) {
       card.className = `visible status-${status}`;
-      document.getElementById("title").textContent =
+      document.getElementById('title').textContent =
         (item && item.title) || status;
-      document.getElementById("text").textContent =
-        (item && item.text) || "";
+      document.getElementById('text').textContent = (item && item.text) || '';
       setBubbleVisible(true);
     } else {
-      card.className = "";
+      card.className = '';
       setBubbleVisible(false);
     }
   } catch (e) {
-    card.className = "";
+    card.className = '';
     setBubbleVisible(false);
     lastState = null;
   }

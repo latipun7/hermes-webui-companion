@@ -68,12 +68,12 @@ flowchart TB
 6. As a Hermes user running WSL, I want the pet renderer to work without manual filesystem path hacks.
 7. As a developer, I want the sidecar to auto-start with WSL as a systemd user service.
 8. As a first-time user, I want to install the pet renderer once and have it auto-detect my Hermes setup — using direct filesystem access when on the same host, or the sidecar when Hermes is in WSL.
-13. As a user running Hermes natively on my host OS (no WSL), I want the renderer to work without installing or running a sidecar.
-14. As a user, I want to override the Hermes installation path via `HERMES_HOME` environment variable when my setup uses a non-default location.
-9. As a user who switches pets frequently, I want the renderer to detect active pet changes (via `hermes pets select`) and reload the spritesheet in-place without restarting the Tauri process.
-10. As a user, I want to switch my active pet from the pet window's right-click menu without touching the terminal.
-11. As a developer, I want linting and formatting enforced before every commit so the codebase stays consistent.
-12. As a developer, I want CI to run all checks (fmt, clippy, tests) on every push/PR so I can merge with confidence.
+9. As a user running Hermes natively on my host OS (no WSL), I want the renderer to work without installing or running a sidecar.
+10. As a user, I want to override the Hermes installation path via `HERMES_HOME` environment variable when my setup uses a non-default location.
+11. As a user who switches pets frequently, I want the renderer to detect active pet changes (via `hermes pets select`) and reload the spritesheet in-place without restarting the Tauri process.
+12. As a user, I want to switch my active pet from the pet window's right-click menu without touching the terminal.
+13. As a developer, I want linting and formatting enforced before every commit so the codebase stays consistent.
+14. As a developer, I want CI to run all checks (fmt, clippy, tests) on every push/PR so I can merge with confidence.
 
 ## Implementation Decisions
 

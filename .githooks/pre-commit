@@ -1,29 +1,54 @@
 #!/usr/bin/env bash
-# Pre-commit hook: enforce rustfmt + clippy before every commit.
+# Pre-commit hook: enforce formatting & linting before every commit.
 # Install with: git config core.hooksPath .githooks
 
 set -euo pipefail
 
+# 1. Rust Formatting
 echo "[pre-commit] Checking Rust formatting..."
-cargo fmt --check --all 2>&1 | sed 's/^/[rustfmt] /'
-fmt_exit=$?
-
-if [ $fmt_exit -ne 0 ]; then
-  echo ""
-  echo "❌ [rustfmt] Formatting check FAILED."
+if ! cargo fmt --check --all 2>&1 | sed 's/^/[rustfmt] /'; then
+  echo -e "\n❌ [rustfmt] Formatting check FAILED."
   echo "   Run 'cargo fmt' to fix automatically, then stage again."
   exit 1
 fi
 
+# 2. Clippy
 echo "[pre-commit] Running Clippy..."
-cargo clippy --locked --workspace --all-targets --all-features -- -D warnings 2>&1 | sed 's/^/[clippy] /'
-clippy_exit=$?
-
-if [ $clippy_exit -ne 0 ]; then
-  echo ""
-  echo "❌ [clippy] Clippy check FAILED."
+if ! cargo clippy --locked --workspace --all-targets --all-features -- -D warnings 2>&1 | sed 's/^/[clippy] /'; then
+  echo -e "\n❌ [clippy] Clippy check FAILED."
   echo "   Fix the warnings above, then stage again."
   exit 1
 fi
 
-echo "✅ [pre-commit] All checks passed — fmt + clippy clean."
+# 3. Get Staged Files
+echo "[pre-commit] Checking staged files..."
+staged_files=$(git diff --cached --name-only --diff-filter=ACMR)
+
+# Guard clause: Exit early if nothing is staged
+if [ -z "$staged_files" ]; then
+  echo "[pre-commit] No staged files — skipping prettier & markdownlint."
+  echo "✅ [pre-commit] All checks passed — fmt + clippy clean."
+  exit 0
+fi
+
+# 4. Prettier (Formats staged files safely)
+echo "[pre-commit] Formatting staged files with Prettier..."
+echo "$staged_files" | tr '\n' '\0' | xargs -0 npx --yes prettier --write --ignore-unknown 2>&1 | sed 's/^/[prettier] /'
+
+# Safe re-stage using null separators (handles paths with spaces)
+echo "$staged_files" | tr '\n' '\0' | xargs -0 git add
+
+# 5. Markdownlint (Only on staged .md files)
+staged_md=$(echo "$staged_files" | grep '\.md$' || true)
+
+if [ -n "$staged_md" ]; then
+  echo "[pre-commit] Checking staged .md files with markdownlint..."
+
+  if ! echo "$staged_md" | tr '\n' '\0' | xargs -0 npx --yes markdownlint-cli 2>&1 | sed 's/^/[markdownlint] /'; then
+    echo -e "\n❌ [markdownlint] Markdown lint check FAILED."
+    echo "   Fix the issues above, then stage again."
+    exit 1
+  fi
+fi
+
+echo "✅ [pre-commit] All checks passed — fmt + clippy + markdownlint clean."
