@@ -13,10 +13,10 @@ clippy:
 check: fmt clippy
 
 markdownlint:
-	npx --yes markdownlint-cli '**/*.md'
+	prek run --all-files markdownlint-cli2
 
 prettier:
-	npx --yes prettier --check --ignore-unknown .
+	prek run --all-files prettier
 
 test:
 	cargo test --locked --workspace --all-targets --all-features
@@ -27,10 +27,10 @@ clean:
 # CI gate — everything that must pass before merge
 ci: check prettier markdownlint test
 
-# Configure git to use .githooks (one-time setup, or after clone)
+# Configure git hooks via prek (one-time setup, or after clone)
 setup-hooks:
-	git config core.hooksPath .githooks
-	@echo "Git hooks path set to .githooks/"
+	prek install
+	@echo "Git hooks installed via prek"
 
 lint:
 	cargo clippy --locked --workspace --all-targets --all-features -- -W clippy::pedantic -W clippy::nursery -D warnings

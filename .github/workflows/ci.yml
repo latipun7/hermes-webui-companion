@@ -48,10 +48,10 @@ jobs:
             cargo-${{ runner.os }}-
 
       - name: 🖊️ Check Formatting (Prettier)
-        run: npx --yes prettier --check --ignore-unknown .
+        run: npx --yes prettier@3.9.5 --check --ignore-unknown .
 
       - name: 🖊️ Check Markdown Lint
-        run: npx --yes markdownlint-cli '**/*.md'
+        run: npx --yes markdownlint-cli2@0.23.1 '**/*.md'
 
       - name: 🎨 Check Formatting
         run: cargo fmt --check --all

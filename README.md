@@ -78,6 +78,10 @@ The renderer auto-detects the mode at startup and stays in it for the session li
 
 ### Prerequisites
 
+- **[prek](https://prek.j178.dev/installation/)** — Git hook manager. Install via:
+  - **Cargo**: `cargo install prek`
+  - **Arch Linux** (AUR): `yay -S prek-bin`
+  - **macOS** (Homebrew): `brew install j178/tap/prek`
 - **Tauri runtime** — [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) on Windows, webkit2gtk on Linux, built-in WebKit on macOS
 - **Hermes Agent** with [petdex](https://petdex.dev) pet installed (`hermes pets install <slug>`)
 - **Hermes WebUI** running and accessible at `localhost:8787` — either on the same host (direct mode) or inside WSL (sidecar mode)
@@ -128,10 +132,10 @@ In your Hermes WebUI, make sure the Desktop Companion extension is enabled. It P
 ```sh
 webui-companion/
 ├── Cargo.toml               # Workspace root
+├── .pre-commit-config.yaml  # prek hooks: fmt, clippy, prettier, markdownlint-cli2
 ├── rustfmt.toml             # Formatting rules
 ├── Makefile                 # Convenience commands
 ├── context.md               # Domain glossary (canonical terminology)
-├── .githooks/pre-commit     # Enforced linting & formatting
 ├── crates/
 │   ├── common/               # Shared types + ConfigReader
 │   ├── sidecar/             # WSL HTTP server (axum)
@@ -157,6 +161,9 @@ sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev \
 git clone https://github.com/latipun7/hermes-webui-companion.git
 cd hermes-webui-companion
 
+# Install Git hooks (prek required — see Prerequisites)
+prek install
+
 # Build the sidecar (optional — WSL mode only)
 cargo build --release -p hermes-webui-companion-sidecar
 
@@ -169,7 +176,6 @@ cargo test --workspace --all-targets --all-features
 ```bash
 # All platforms — set debug mode, then run with Tauri
 export HERMES_COMPANION_DEBUG=1
-cd crates/renderer
 cargo tauri dev --features gui
 ```
 
@@ -193,8 +199,7 @@ cargo build --locked --release -p hermes-webui-companion-sidecar
 ### Renderer (target platform)
 
 ```bash
-cd crates/renderer
-npx @tauri-apps/cli@latest build --features gui
+cargo tauri build --features gui
 ```
 
 Or use the release workflow — just push a tag and CI builds everything:
@@ -241,11 +246,13 @@ Each [GitHub Release](https://github.com/latipun7/hermes-webui-companion/release
 
 ## 🤝 Contributing
 
-1. Fork the repo
-2. Install pre-commit hooks: `make setup-hooks`
-3. Create a feature branch
-4. Make your changes (fmt + clippy enforced)
-5. Open a pull request
+<!-- BUG: https://github.com/DavidAnson/markdownlint/issues/2171 -->
+<!-- markdownlint-disable MD051 -->
+
+1. See [Development](#-development) for local setup
+2. Create a feature branch
+3. Make your changes (fmt + clippy enforced)
+4. Open a pull request
 
 Before opening a PR, run the full CI gate locally:
 

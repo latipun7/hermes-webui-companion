@@ -31,8 +31,8 @@ flowchart LR
 ```
 webui-companion/
 ├── Cargo.toml              # workspace root
+├── .pre-commit-config.yaml # prek hooks: fmt, clippy, prettier, markdownlint-cli2
 ├── Makefile                # fmt, clippy, test, ci, setup-hooks
-├── .githooks/pre-commit    # fmt --check + clippy -D warnings
 ├── .github/workflows/ci.yml
 ├── context.md              # domain glossary
 ├── docs/
@@ -74,7 +74,7 @@ cargo test --locked --workspace --all-targets --all-features
 
 Workspace lints (`Cargo.toml`): `unsafe_code=deny`, `rust_2018_idioms=deny`, `rust_2024_compatibility=deny`, `clippy::all=warn`. Crates inherit via `[lints] workspace = true`.
 
-Pre-commit (`.githooks/pre-commit`): `cargo fmt --check --all` + `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`. Install: `git config core.hooksPath .githooks`.
+Pre-commit (`.pre-commit-config.yaml`, managed by [prek](https://prek.j178.dev)): `cargo fmt --check`, `cargo clippy`, `prettier --write`, `markdownlint-cli2`. Install: `prek install` or `make setup-hooks`.
 
 CI (`.github/workflows/ci.yml`): fmt → clippy → test, all with `--locked --all-features`.
 
