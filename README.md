@@ -12,10 +12,10 @@
   </p>
   <p align="center">
     <a href="#-features">Features</a> •
-    <a href="#-architecture">Architecture</a> •
+    <a href="#%EF%B8%8F-architecture">Architecture</a> •
     <a href="#-quick-start">Quick Start</a> •
-    <a href="#-development">Development</a> •
-    <a href="#-building-from-source">Building</a>
+    <a href="#%EF%B8%8F-development">Development</a> •
+    <a href="#%EF%B8%8F-building-from-source">Building</a>
   </p>
   <p align="center">
     <img src="https://img.shields.io/github/v/release/latipun7/hermes-webui-companion?style=flat&label=Release&color=%239987CE" alt="Release">
@@ -246,10 +246,7 @@ Each [GitHub Release](https://github.com/latipun7/hermes-webui-companion/release
 
 ## 🤝 Contributing
 
-<!-- BUG: https://github.com/DavidAnson/markdownlint/issues/2171 -->
-<!-- markdownlint-disable MD051 -->
-
-1. See [Development](#-development) for local setup
+1. See [Development](#%EF%B8%8F-development) for local setup
 2. Create a feature branch
 3. Make your changes (fmt + clippy enforced)
 4. Open a pull request
