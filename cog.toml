@@ -2,11 +2,11 @@ tag_prefix = "v"
 ignore_merge_commits = true
 branch_whitelist = ["main"]
 
-pre_package_bump_hooks = [
+pre_bump_hooks = [
   "mise run ci-check",
   "echo 'bumping from {{latest|0.0.0}} to {{version|0.0.1}}'",
   "cargo set-version {{version}}",
-  "mise run build",
+  "cargo build --release",
 ]
 
 post_bump_hooks = [
