@@ -6,10 +6,13 @@ pre_bump_hooks = [
   "mise run ci-check",
   "echo 'bumping from {{latest|0.0.0}} to {{version|0.0.1}}'",
   "cargo set-version {{version}}",
-  "cargo build --release",
+  "mise run build",
 ]
 
 post_bump_hooks = [
+  "mise run prettier || true",
+  "git add -A",
+  "git commit --amend --no-edit --allow-empty --allow-empty-message",
   "echo 'This is a manual bump, no automated cargo release or push to remote will be triggered.'"
 ]
 
