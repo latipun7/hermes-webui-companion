@@ -164,7 +164,7 @@ CORS is handled with full headers (Allow-Origin, Allow-Methods, Allow-Headers) a
 
 The priority chain **sidecar unhealthy → Approval → Clarify → companion state** is centralized in `animation.rs::resolve_animation_state()`. The bridge server's `GET /api/state` endpoint returns a `resolved_animation` field so frontends never re-implement priority logic. A `sidecar_healthy` AtomicBool flag prevents race conditions where incoming WebUI snapshots overwrite a health-check-triggered Failed state.
 
-Animation state mapping — canonical terms from [`context.md`](../../context.md):
+Animation state mapping — canonical terms from [`context.md`](../context.md):
 
 | Input                     | Animation State |
 | ------------------------- | --------------- |
@@ -217,8 +217,8 @@ The sidecar runs as a systemd user service in WSL:
 - **`[workspace.lints]` in Cargo.toml** — `unsafe_code=deny`, `rust_2018_idioms=deny`, `rust_2024_compatibility=deny`, `clippy::all=warn`
 - **`[lints] workspace = true`** per crate — each crate inherits workspace lints via TOML `[lints]` section
 - **Pre-commit hook** (`.githooks/pre-commit`) — runs `cargo fmt --check --all` + `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings` before every commit
-- **GitHub Actions** (`.github/workflows/ci.yml`) — `cargo fmt --check --all` → `cargo clippy` → `cargo test`, all with `--locked` and `--all-features`, emoji steps, cargo cache, concurrency cancel-in-progress
-- **`Makefile`** — convenience targets: `fmt`, `clippy`, `check`, `test`, `ci`, `setup-hooks`
+- **GitHub Actions** (`.github/workflows/ci.yml`) — code-quality via `jdx/mise-action` + `mise run ci-check`
+- **`mise.toml`** — task runner + tool manager: `mise run check`, `mise run test`, `mise run ci-check`, `mise run release`
 - All cargo commands use `--locked` to pin dependency versions from `Cargo.lock`
 - All cargo commands use `--all-features` to validate gui feature code in CI
 

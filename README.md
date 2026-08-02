@@ -13,9 +13,9 @@
   <p align="center">
     <a href="#-features">Features</a> •
     <a href="#%EF%B8%8F-architecture">Architecture</a> •
-    <a href="#-quick-start">Quick Start</a> •
-    <a href="#%EF%B8%8F-development">Development</a> •
-    <a href="#%EF%B8%8F-building-from-source">Building</a>
+    <a href="#-installation">Installation</a> •
+    <a href="#-usage">Usage</a> •
+    <a href="#for-developers">For Developers</a>
   </p>
   <p align="center">
     <img src="https://img.shields.io/github/v/release/latipun7/hermes-webui-companion?style=flat&label=Release&color=%239987CE" alt="Release">
@@ -74,21 +74,23 @@ The renderer auto-detects the mode at startup and stays in it for the session li
 | **Renderer** | Always            | Renders the pet, shows bubbles, handles state      |
 | **Sidecar**  | WSL / remote only | Bridges `~/.hermes/` from WSL to the host via HTTP |
 
-## ⚡ Quick Start
+---
+
+# User Guide
+
+Everything you need to install and run Hermes WebUI Companion.
+
+## 📦 Installation
 
 ### Prerequisites
 
-- **[prek](https://prek.j178.dev/installation/)** — Git hook manager. Install via:
-  - **Cargo**: `cargo install prek`
-  - **Arch Linux** (AUR): `yay -S prek-bin`
-  - **macOS** (Homebrew): `brew install j178/tap/prek`
+- **[Hermes Agent](https://github.com/nousresearch/hermes-agent)** installed with a [petdex](https://petdex.dev) pet (`hermes pets install <slug>`)
+- **Hermes WebUI** running at `localhost:8787` — on the same host (direct mode) or inside WSL (sidecar mode)
 - **Tauri runtime** — [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) on Windows, webkit2gtk on Linux, built-in WebKit on macOS
-- **Hermes Agent** with [petdex](https://petdex.dev) pet installed (`hermes pets install <slug>`)
-- **Hermes WebUI** running and accessible at `localhost:8787` — either on the same host (direct mode) or inside WSL (sidecar mode)
 
-### 1. Install the Sidecar (optional — only for WSL / remote Hermes)
+### Step 1 — Install the Sidecar (WSL / remote only)
 
-If Hermes runs inside WSL or on a different machine, install the sidecar to bridge the filesystem boundary. Skip this step if Hermes and the renderer share the same host — direct mode handles that automatically.
+If Hermes runs inside WSL or on a different machine, install the sidecar to bridge the filesystem boundary. **Skip this step** if Hermes and the renderer share the same host — direct mode handles that automatically.
 
 ```bash
 # Download the latest sidecar binary and service file
@@ -103,111 +105,25 @@ cp hermes-webui-companion-sidecar.service ~/.config/systemd/user/
 systemctl --user enable --now hermes-webui-companion-sidecar
 ```
 
-### 2. Install the Renderer
+### Step 2 — Install the Renderer
 
-Download the latest binary for your platform from the [Releases page](https://github.com/latipun7/hermes-webui-companion/releases) and make it executable:
+Download the latest binary for your platform from the [Releases page](https://github.com/latipun7/hermes-webui-companion/releases):
 
-- **Windows**: `*-x86_64-pc-windows-msvc.exe`
-- **macOS**: `*-x86_64-apple-darwin`
-- **Linux**: `*-x86_64-unknown-linux-gnu`
+- **Windows**: `hermes-webui-companion-gui-x86_64-pc-windows-msvc.exe`
+- **macOS**: `hermes-webui-companion-gui-x86_64-apple-darwin`
+- **Linux**: `hermes-webui-companion-gui-x86_64-unknown-linux-gnu`
 
-### 3. Enable the WebUI Adapter
+### Step 3 — Enable the WebUI Adapter
 
 In your Hermes WebUI, make sure the Desktop Companion extension is enabled. It POSTs real-time session snapshots to the bridge server at `:17787`.
 
----
-
-### 🎮 How to Use
+## 🎮 Usage
 
 - **Watch the pet** — it moves and reacts based on your sessions: idle, running, waiting for approval, reviewing, waving
 - **Right-click** the pet window for Restart, Close, or Switch pet
 - **Notifications** appear as bubble cards above the pet
 - **Click the bubble** to navigate directly to the session in WebUI
 - **Drag** the pet window anywhere on your screen
-
-## 🛠️ Development
-
-### Project Structure
-
-```sh
-webui-companion/
-├── Cargo.toml               # Workspace root
-├── .pre-commit-config.yaml  # prek hooks: fmt, clippy, prettier, markdownlint-cli2
-├── rustfmt.toml             # Formatting rules
-├── Makefile                 # Convenience commands
-├── context.md               # Domain glossary (canonical terminology)
-├── crates/
-│   ├── common/               # Shared types + ConfigReader
-│   ├── sidecar/             # WSL HTTP server (axum)
-│   └── renderer/            # Desktop app (Tauri v2)
-│       ├── src/             # Rust modules
-│       ├── gui/             # HTML/CSS/JS frontend
-│       └── tauri.conf.json  # Tauri configuration
-└── docs/
-    ├── prd.md               # Product requirements
-    └── adr/                 # Architecture decisions
-```
-
-### Local Setup (WSL / Linux)
-
-> Sidecar build is optional — only needed if you plan to run Hermes in WSL.
-
-```bash
-# Install system dependencies (for Tauri on Linux)
-sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev \
-  libayatana-appindicator3-dev librsvg2-dev
-
-# Clone the repo
-git clone https://github.com/latipun7/hermes-webui-companion.git
-cd hermes-webui-companion
-
-# Install Git hooks (prek required — see Prerequisites)
-prek install
-
-# Build the sidecar (optional — WSL mode only)
-cargo build --release -p hermes-webui-companion-sidecar
-
-# Run tests
-cargo test --workspace --all-targets --all-features
-```
-
-### Run the Renderer
-
-```bash
-# All platforms — set debug mode, then run with Tauri
-export HERMES_COMPANION_DEBUG=1
-cargo tauri dev --features gui
-```
-
-### Code Quality
-
-This project enforces:
-
-- **Rustfmt** — consistent formatting (`cargo fmt --all`)
-- **Clippy** — lint with `-D warnings` (`make clippy`)
-- **Pre-commit hook** — runs both before every commit (`make setup-hooks`)
-- **CI** — fmt → clippy → test on every push/PR
-
-## 🏗️ Building from Source
-
-### Sidecar (optional — WSL mode only)
-
-```bash
-cargo build --locked --release -p hermes-webui-companion-sidecar
-```
-
-### Renderer (target platform)
-
-```bash
-cargo tauri build --features gui
-```
-
-Or use the release workflow — just push a tag and CI builds everything:
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
 
 ## 🔧 Configuration
 
@@ -216,7 +132,6 @@ git push origin v0.1.0
 | `HERMES_HOME`            | (auto)  | Override Hermes installation path (direct mode) |
 | `HERMES_WEBUI_PORT`      | `8787`  | WebUI health check port                         |
 | `HERMES_COMPANION_DEBUG` | —       | Set to `1` for verbose logging                  |
-| `CARGO_TARGET_DIR`       | —       | Custom build output directory                   |
 
 Debug logging gives you scoped prefixes:
 
@@ -229,33 +144,126 @@ Debug logging gives you scoped prefixes:
 
 Each [GitHub Release](https://github.com/latipun7/hermes-webui-companion/releases) ships:
 
-| File                                     | Platform | Description       |
-| ---------------------------------------- | -------- | ----------------- |
-| `hermes-webui-companion-sidecar`         | Linux    | Sidecar binary    |
-| `hermes-webui-companion-sidecar.service` | Linux    | systemd unit file |
-| `*-x86_64-unknown-linux-gnu`             | Linux    | Renderer binary   |
-| `*-x86_64-apple-darwin`                  | macOS    | Renderer binary   |
-| `*-x86_64-pc-windows-msvc.exe`           | Windows  | Renderer binary   |
+| File                                                    | Platform | Description       |
+| ------------------------------------------------------- | -------- | ----------------- |
+| `hermes-webui-companion-sidecar`                        | Linux    | Sidecar binary    |
+| `hermes-webui-companion-sidecar.service`                | Linux    | systemd unit file |
+| `hermes-webui-companion-gui-x86_64-unknown-linux-gnu`   | Linux    | Renderer binary   |
+| `hermes-webui-companion-gui-x86_64-apple-darwin`        | macOS    | Renderer binary   |
+| `hermes-webui-companion-gui-x86_64-pc-windows-msvc.exe` | Windows  | Renderer binary   |
 
-## 📚 Documentation
+---
 
-- [**context.md**](context.md) — Canonical domain glossary (all project terminology)
-- [**docs/prd.md**](docs/prd.md) — Product requirements
-- [**docs/adr/**](docs/adr/) — Architecture Decision Records (sequentially numbered)
-- [**agents.md**](agents.md) — AI agent context (architecture, build commands, critical gotchas)
+# For Developers
 
-## 🤝 Contributing
+Everything you need to set up the project locally, build from source, and contribute.
 
-1. See [Development](#%EF%B8%8F-development) for local setup
-2. Create a feature branch
-3. Make your changes (fmt + clippy enforced)
-4. Open a pull request
+## 🚀 Quick Start
 
-Before opening a PR, run the full CI gate locally:
+```sh
+git clone https://github.com/latipun7/hermes-webui-companion.git
+cd hermes-webui-companion
+mise install
+```
+
+Assume you have [mise](https://mise.jdx.dev/installing-mise.html) installed already, this installs the Rust toolchain, prek (git hooks), and cocogitto — all in one command.
+
+### System Dependencies (Linux only)
 
 ```bash
-make ci
+sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev \
+  libayatana-appindicator3-dev librsvg2-dev
 ```
+
+## 📂 Project Structure
+
+```sh
+webui-companion/
+├── Cargo.toml               # Workspace root
+├── .pre-commit-config.yaml  # prek hooks: fmt, clippy, prettier, markdownlint-cli2
+├── rustfmt.toml             # Formatting rules
+├── mise.toml                # Task runner + tool manager
+├── context.md               # Domain glossary (canonical terminology)
+├── crates/
+│   ├── common/              # Shared types + ConfigReader
+│   ├── sidecar/             # WSL HTTP server (axum)
+│   └── renderer/            # Desktop app (Tauri v2)
+│       ├── src/             # Rust modules
+│       ├── gui/             # HTML/CSS/JS frontend
+│       └── tauri.conf.json  # Tauri configuration
+└── docs/
+    ├── prd.md               # Product requirements
+    └── adr/                 # Architecture decisions
+```
+
+## 🔨 Building
+
+### Sidecar
+
+```bash
+cargo build --locked --release -p hermes-webui-companion-sidecar
+```
+
+### Renderer (target platform)
+
+```bash
+cargo tauri build --features gui
+```
+
+## 🧪 Running in Dev Mode
+
+```bash
+export HERMES_COMPANION_DEBUG=1
+cargo tauri dev --features gui
+```
+
+## ✅ Code Quality
+
+This project enforces:
+
+- **Rustfmt** — consistent formatting (`mise run fmt`)
+- **Clippy** — lint with `-D warnings` (`mise run check`)
+- **Prettier** — code formatting for JS/CSS/JSON/YAML/MD (`mise run prettier`)
+- **markdownlint** — consistent markdown (`mise run markdownlint`)
+- **Conventional Commits** — enforced by `cog verify` commit-msg hook
+- **Pre-commit hook** — runs fmt, clippy, prettier, markdownlint before every commit (installed by `mise install`)
+- **CI** — runs the full `mise run ci-check` gate on every push/PR
+
+### Commands
+
+| Command              | Description                                               |
+| -------------------- | --------------------------------------------------------- |
+| `mise run check`     | Check Rust formatting and clippy (read-only)              |
+| `mise run test`      | Run all tests                                             |
+| `mise run lint`      | Fix formatting and linting issues                         |
+| `mise run fmt`       | Format Rust code                                          |
+| `mise run build`     | Build release binary                                      |
+| `mise run ci-check`  | Full CI gate (prettier, markdownlint, fmt, clippy, tests) |
+| `mise run release`   | Auto-bump version + changelog + tag                       |
+| `mise run changelog` | Generate changelog from commit history                    |
+
+## 📝 Commit Convention
+
+This project follows [Conventional Commits](https://www.conventionalcommits.org/).
+Commit messages are linted automatically via [cocogitto](https://docs.cocogitto.io/).
+
+```sh
+# With cocogitto (recommended)
+cog commit feat "add awesome feature"
+
+# With git (enforced by commit-msg hook)
+git commit -m "feat: add awesome feature"
+```
+
+## 📬 Before Opening a PR
+
+Run the full CI gate locally:
+
+```bash
+mise run ci-check
+```
+
+This runs prettier, markdownlint, fmt (check), clippy, and tests — everything CI will verify.
 
 ## 📄 License
 

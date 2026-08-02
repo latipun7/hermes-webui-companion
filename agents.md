@@ -32,7 +32,7 @@ flowchart LR
 webui-companion/
 ├── Cargo.toml              # workspace root
 ├── .pre-commit-config.yaml # prek hooks: fmt, clippy, prettier, markdownlint-cli2
-├── Makefile                # fmt, clippy, test, ci, setup-hooks
+├── mise.toml                # task runner + tool manager (mise)
 ├── .github/workflows/ci.yml
 ├── context.md              # domain glossary
 ├── docs/
@@ -74,11 +74,11 @@ cargo test --locked --workspace --all-targets --all-features
 
 Workspace lints (`Cargo.toml`): `unsafe_code=deny`, `rust_2018_idioms=deny`, `rust_2024_compatibility=deny`, `clippy::all=warn`. Crates inherit via `[lints] workspace = true`.
 
-Pre-commit (`.pre-commit-config.yaml`, managed by [prek](https://prek.j178.dev)): `cargo fmt --check`, `cargo clippy`, `prettier --write`, `markdownlint-cli2`. Install: `prek install` or `make setup-hooks`.
+Pre-commit (`.pre-commit-config.yaml`, managed by [prek](https://prek.j178.dev)): `cargo fmt --check`, `cargo clippy`, `prettier --write`, `markdownlint-cli2`, `cog verify`. Installed by `mise install` (via postinstall hook).
 
-CI (`.github/workflows/ci.yml`): fmt → clippy → test, all with `--locked --all-features`.
+CI (`.github/workflows/ci.yml`): code-quality via `jdx/mise-action` + `mise run ci-check`.
 
-Makefile: `make check` (fmt + clippy), `make test`, `make ci` (check + test), `make setup-hooks`.
+Dev tasks (`mise.toml`): `mise run check` (fmt + clippy), `mise run test`, `mise run ci-check` (prettier + markdownlint + fmt + clippy + test).
 
 ## Critical Gotchas
 
@@ -87,7 +87,7 @@ Makefile: `make check` (fmt + clippy), `make test`, `make ci` (check + test), `m
 - **Feature-gated Tauri** — `gui` feature keeps Tauri deps optional so library tests run without webkit2gtk in WSL.
 - **`[lints] workspace = true`** — per-crate TOML `[lints]` section, NOT `package.lints.workspace = true` (Cargo 1.96 quirk).
 - **`edition.workspace = true`** — edition inherited from workspace `[package]`, no per-crate duplication.
-- **`--locked` + `--all-features`** — all cargo commands in CI/hooks/Makefile pin deps and compile every feature.
+- **`--locked` + `--all-features`** — all cargo commands in CI/hooks/tasks pin deps and compile every feature.
 - **`SidecarClient::check_health()`** — application-level (hits `GET /health`, checks `{"ok":true}`), NOT raw TCP connect.
 - **`tiny_http` for bridge** — synchronous, no tokio runtime. Handler functions are pure and testable without HTTP server.
 - **`#![windows_subsystem = "windows"]`** — suppresses console window on release builds.

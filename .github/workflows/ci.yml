@@ -31,34 +31,29 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
-      - name: 🦀 Install Rust
-        uses: dtolnay/rust-toolchain@master
+      - name: 📦 Setup mise
+        id: setup-mise
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
         with:
-          toolchain: 1.97.1
-          components: clippy, rustfmt
+          experimental: true
 
-      - name: ♻️ Cache Cargo
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: ♻️ Manage Rust toolchains Cache
+        id: cache-rust
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: |
+            ~/.rustup/toolchains/
             ~/.cargo/
             target/
-          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-            cargo-${{ runner.os }}-
+            rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+            rust-${{ runner.os }}-
 
-      - name: 🖊️ Check Formatting (Prettier)
-        run: npx --yes prettier@3.9.5 --check --ignore-unknown .
+      # HACK: based on https://github.com/jdx/mise-action/issues/215
+      - name: ⚙️ Force Reinstall Rust Toolchains on Cache Miss
+        if: ${{ steps.setup-mise.outputs.cache-hit == 'true' && steps.cache-rust.outputs.cache-hit != 'true' }}
+        run: mise install --force rust
 
-      - name: 🖊️ Check Markdown Lint
-        run: npx --yes markdownlint-cli2@0.23.1 '**/*.md'
-
-      - name: 🎨 Check Formatting
-        run: cargo fmt --check --all
-
-      - name: 📎 Check Linting
-        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
-
-      - name: 🧪 Run Tests
-        run: cargo test --locked --workspace --all-targets --all-features
+      - name: ✅ Run CI Checks
+        run: mise run ci-check

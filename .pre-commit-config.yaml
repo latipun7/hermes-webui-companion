@@ -1,17 +1,33 @@
-# Pre-commit hooks managed by prek (https://prek.j178.dev)
-# Install: prek install
-# Run all: prek run --all-files
+# yaml-language-server: $schema=https://www.schemastore.org/prek.json
+
+default_stages: [pre-commit]
+default_install_hook_types: [pre-commit, commit-msg]
 
 repos:
+  - repo: builtin
+    hooks:
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: end-of-file-fixer
+
+  # ── TOML ────────────────────────────────────────────────────────────
+  - repo: https://github.com/tombi-toml/tombi-pre-commit
+    rev: v1.2.4
+    hooks:
+      - id: tombi-format
+        files: \.toml$
+
   # ── Rust ────────────────────────────────────────────────────────────
   - repo: local
     hooks:
-      - id: cargo-fmt
-        name: cargo fmt
+      - id: rustfmt
+        name: rustfmt
         language: system
-        entry: cargo fmt --check --all
+        entry: rustfmt
         types: [rust]
-        pass_filenames: false
 
       - id: cargo-clippy
         name: cargo clippy
@@ -37,3 +53,13 @@ repos:
     rev: v0.23.1
     hooks:
       - id: markdownlint-cli2
+
+  # ── Commit Message Lint ─────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: cog-verify
+        name: cog verify (conventional commits)
+        language: system
+        entry: mise exec -- cog verify --file
+        stages: [commit-msg]
+        pass_filenames: true

@@ -26,22 +26,30 @@ jobs:
       - name: 🛎️ Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: 🦀 Install Rust
-        uses: dtolnay/rust-toolchain@master
+      - name: 📦 Setup mise
+        id: setup-mise
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
         with:
-          toolchain: 1.97.1
+          experimental: true
 
-      - name: ♻️ Cache Cargo
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: ♻️ Manage Build Cache
+        id: cache-rust
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: |
+            ~/.rustup/toolchains/
             ~/.cargo/
             target/
-          key: cargo-sidecar-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: rust-sidecar-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            cargo-sidecar-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-            cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-            cargo-${{ runner.os }}-
+            rust-sidecar-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+            rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+            rust-${{ runner.os }}-
+
+      # HACK: based on https://github.com/jdx/mise-action/issues/215
+      - name: ⚙️ Force Reinstall Rust Toolchains on Cache Miss
+        if: ${{ steps.setup-mise.outputs.cache-hit == 'true' && steps.cache-rust.outputs.cache-hit != 'true' }}
+        run: mise install --force rust
 
       - name: 🛠️ Build
         run: cargo build --locked --release -p hermes-webui-companion-sidecar
@@ -82,7 +90,35 @@ jobs:
       - name: 🛎️ Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: 📦 Install system dependencies (Linux)
+      - name: 📦 Setup mise
+        id: setup-mise
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
+        with:
+          experimental: true
+
+      - name: ♻️ Manage Build Cache
+        id: cache-rust
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: |
+            ~/.rustup/toolchains/
+            ~/.cargo/
+            target/
+          key: rust-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            rust-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+            rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+            rust-${{ runner.os }}-
+
+      # HACK: based on https://github.com/jdx/mise-action/issues/215
+      - name: ⚙️ Force Reinstall Rust Toolchains on Cache Miss
+        if: ${{ steps.setup-mise.outputs.cache-hit == 'true' && steps.cache-rust.outputs.cache-hit != 'true' }}
+        run: mise install --force rust
+
+      - name: 🎯 Add cross-compilation target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: 🔗 Install Tauri system deps (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get -y update
@@ -92,57 +128,35 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
-      - name: 🦀 Install Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.97.1
-
-      - name: 📦 Install Tauri CLI
-        run: npx --yes @tauri-apps/cli@latest --help
-
-      - name: ♻️ Cache Cargo
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/
-            target/
-          key: cargo-renderer-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            cargo-renderer-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-            cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-            cargo-${{ runner.os }}-
-
-      - name: 🛠️ Tauri Build
-        run: npx --yes @tauri-apps/cli@latest build --features gui
-        working-directory: crates/renderer
+      - name: 🛠️ Build
+        run: |
+          cargo build --locked --release \
+            --target ${{ matrix.target }} \
+            -p hermes-webui-companion-renderer \
+            --features gui \
+            --bin hermes-webui-companion-gui
 
       - name: 📁 Stage (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
         run: |
           mkdir -p staging
-          PREFIX="hermes-webui-companion-renderer-${{ matrix.target }}"
-          cp "target/release/hermes-webui-companion-gui" "staging/${PREFIX}"
+          PREFIX="hermes-webui-companion-gui-${{ matrix.target }}"
+          cp "target/${{ matrix.target }}/release/hermes-webui-companion-gui" "staging/${PREFIX}"
           chmod +x "staging/${PREFIX}"
-          if [ -d target/release/bundle ]; then
-            find target/release/bundle -type f -exec cp {} staging/ \;
-          fi
 
       - name: 📁 Stage (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           mkdir staging -Force
-          $prefix = "hermes-webui-companion-renderer-${{ matrix.target }}"
-          Copy-Item "target/release/hermes-webui-companion-gui.exe" "staging/${prefix}.exe"
-          if (Test-Path "target/release/bundle") {
-            Get-ChildItem -Recurse -File "target/release/bundle" | Copy-Item -Destination staging
-          }
+          $prefix = "hermes-webui-companion-gui-${{ matrix.target }}"
+          Copy-Item "target/${{ matrix.target }}/release/hermes-webui-companion-gui.exe" "staging/${prefix}.exe"
 
       - name: ⬆️ Upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: hermes-webui-companion-renderer-${{ matrix.target }}
+          name: hermes-webui-companion-gui-${{ matrix.target }}
           path: staging/
           retention-days: 5
 
@@ -161,14 +175,17 @@ jobs:
           merge-multiple: true
           path: artifacts
 
-      - name: 🗃️ List Artifacts
-        shell: bash
-        run: find artifacts -type f | sort
+      - name: 📦 Setup mise
+        id: setup-mise
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
+        with:
+          experimental: true
+
+      - name: 📝 Generate Changelog
+        run: cog changelog --at ${{ github.ref_name }} -t .cog/gh-release.tera > github_changelog.md
 
       - name: 🗃️ Create Release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          generate_release_notes: true
+          body_path: github_changelog.md
           files: artifacts/*
