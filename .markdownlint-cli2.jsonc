@@ -1,0 +1,15 @@
+{
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD033": false,
+    "MD040": false,
+  },
+  "overrides": [
+    {
+      "filter": ["changelog.md"],
+      "config": { "MD001": false, "MD024": false },
+      "combine": "merge",
+    },
+  ],
+}
