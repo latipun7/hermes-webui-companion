@@ -129,7 +129,7 @@ jobs:
             librsvg2-dev
 
       - name: 🛠️ Build
-        run: cargo tauri build --features gui -- --locked
+        run: cargo tauri build --features gui --target ${{ matrix.target }} -- --locked
 
       - name: 📁 Stage (Linux/macOS)
         if: runner.os != 'Windows'

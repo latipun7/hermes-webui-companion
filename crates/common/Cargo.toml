@@ -1,6 +1,6 @@
 [package]
 name = "hermes-webui-companion-common"
-version.workspace = true
+version = "0.2.0"
 edition.workspace = true
 repository.workspace = true
 license.workspace = true

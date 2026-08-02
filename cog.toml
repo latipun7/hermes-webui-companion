@@ -12,6 +12,7 @@ post_bump_hooks = [
   "mise run prettier || true",
   "git add -A",
   "git commit --amend --no-edit --allow-empty --allow-empty-message",
+  "git tag -d {{version_tag}} && git tag {{version_tag}} -m '{{version_tag}}'",
   "echo 'This is a manual bump, no automated cargo release or push to remote will be triggered.'"
 ]
 
