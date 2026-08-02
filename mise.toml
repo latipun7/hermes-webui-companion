@@ -1,9 +1,15 @@
 [settings]
 idiomatic_version_file_enable_tools = ["rust"]
 
+[settings.cargo]
+binstall_quickinstall = true
+
 [tools]
 prek = "0.4.10"
 cocogitto = "7.0.0"
+cargo-binstall = "1.21.1"
+"cargo:cargo-set-version" = "0.0.4"
+"cargo:tauri-cli" = "2.11.4"
 
 [hooks]
 postinstall = "prek install"
@@ -54,7 +60,7 @@ env = { CARGO_TERM_COLOR = "always" }
 
 [tasks.build]
 description = "Build release binary"
-run = "cargo build --locked --release"
+run = "cargo tauri build --features gui"
 env = { CARGO_TERM_COLOR = "always" }
 
 [tasks.clean]

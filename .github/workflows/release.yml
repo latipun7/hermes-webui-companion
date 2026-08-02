@@ -129,12 +129,7 @@ jobs:
             librsvg2-dev
 
       - name: 🛠️ Build
-        run: |
-          cargo build --locked --release \
-            --target ${{ matrix.target }} \
-            -p hermes-webui-companion-renderer \
-            --features gui \
-            --bin hermes-webui-companion-gui
+        run: cargo tauri build --features gui -- --locked
 
       - name: 📁 Stage (Linux/macOS)
         if: runner.os != 'Windows'
