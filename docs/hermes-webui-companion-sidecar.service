@@ -5,15 +5,15 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=%h/Documents/projects/webui-companion/target/release/hermes-webui-companion-sidecar
-WorkingDirectory=%h/Documents/projects/webui-companion
+ExecStart=%h/.local/bin/hermes-webui-companion-sidecar
+WorkingDirectory=%h/.hermes/webui
 Restart=on-failure
 RestartSec=5
 Environment=HERMES_HOME=%h/.hermes
 Environment=RUST_LOG=info
 
 # Ensure PATH includes cargo bins and venv
-Environment=PATH=%h/.local/share/cargo/bin:%h/.hermes/hermes-agent/venv/bin:%h/.hermes/hermes-agent/node_modules/.bin:%h/.local/bin:/usr/local/bin:/usr/bin
+Environment=PATH=%h/.hermes/hermes-agent/venv/bin:%h/.hermes/hermes-agent/node_modules/.bin:%h/.local/bin:/usr/local/bin:/usr/bin
 
 [Install]
 WantedBy=default.target
