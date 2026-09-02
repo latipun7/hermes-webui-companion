@@ -5,7 +5,7 @@ idiomatic_version_file_enable_tools = ["rust"]
 binstall_quickinstall = true
 
 [tools]
-prek = "0.4.10"
+prek = "0.5.2"
 cocogitto = "7.0.0"
 cargo-binstall = "1.21.1"
 "cargo:cargo-set-version" = "0.0.4"
